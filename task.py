@@ -14,7 +14,8 @@ HOSTS = {
 
 
 def host_for_blob(blob_hash):
-    return random.randint(1, NUM_HOSTS)
+    # return random.randint(1, NUM_HOSTS)
+    return int(int(blob_hash[0], 16) / len(HOSTS)) + 1
 
 
 def process_blob(blob_path):
@@ -23,7 +24,7 @@ def process_blob(blob_path):
 
     blob_hash = os.path.basename(blob_path)
     host = host_for_blob(blob_hash)
-    print "Copying blob to host %d (%s)" % (host, HOSTS[host])
+    print "Copying blob %s to host %d (%s)" % (blob_hash[0:8], host, HOSTS[host])
 
     # copy blob to host
 
