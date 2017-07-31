@@ -1,11 +1,17 @@
 import os
 from setuptools import setup, find_packages
 
-requires = []
-console_scripts = [
-    'reflector-cluster = ingester.main:main',
+requires = [
+    'twisted==16.6.0',
+    'pycrypto==2.6.1',
+    'rq==0.8.0'
+
 ]
-package_name = "ingester"
+console_scripts = [
+    'prism-server = prism.server:main',
+    'prism-worker = prism.worker:main'
+]
+package_name = "prism"
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
 setup(

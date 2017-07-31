@@ -1,11 +1,11 @@
-import sys
-import os
 import hashlib
+import os
+import sys
 
-import task
+from prism.task import process_blob
 
-from rq import Queue
 from redis import Redis
+from rq import Queue
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 BLOB_DIR = os.path.join(DIR, "blobs")
@@ -35,7 +35,7 @@ def main():
         blobs.append(blob_path)
 
     for blob_path in blobs:
-        q.enqueue(task.process_blob, blob_path)
+        q.enqueue(process_blob, blob_path)
 
 
 if __name__ == "__main__":

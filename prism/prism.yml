@@ -1,0 +1,6 @@
+blob directory: $HOME/.prism
+
+hosts:
+ - jack.lbry.tech
+
+max blobs: 10000

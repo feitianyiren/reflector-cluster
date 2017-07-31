@@ -1,15 +1,17 @@
 import json
 import logging
+
 from twisted.internet import defer, error
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
+from twisted.internet.error import ConnectionDone
 
-from ingester.blob import is_valid_blobhash
-from ingester.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
-from ingester.error import ReflectorClientVersionError
-from ingester.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
-from ingester.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
-from ingester.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
+from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
+from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
+from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
+from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
+from prism.error import ReflectorClientVersionError
+from prism.protocol.blob import is_valid_blobhash
 
 
 log = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ log = logging.getLogger(__name__)
 class ReflectorServerProtocol(Protocol):
     def connectionMade(self):
         peer_info = self.transport.getPeer()
-        log.info('Connected to %s:%i', peer_info.host, peer_info.port)
+        log.debug('Connected to %s:%i', peer_info.host, peer_info.port)
 
         self.protocol_version = self.factory.protocol_version
         self.blob_storage = self.factory.storage
@@ -33,14 +35,13 @@ class ReflectorServerProtocol(Protocol):
         self.request_buff = ""
 
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
-        log.info("Reflector upload from %s finished" % self.peer.host)
+        log.debug("upload from %s finished", self.peer.host)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
         self.transport.loseConnection()
 
     def send_response(self, response_dict):
-        log.debug("send to %s --> %s", self.peer.host, response_dict)
         self.transport.write(json.dumps(response_dict))
 
     ############################
@@ -48,18 +49,22 @@ class ReflectorServerProtocol(Protocol):
     ############################
 
     def clean_up_failed_upload(self, err, blob):
-        log.warning("Failed to receive %s", blob)
-        if err.check(DownloadCanceledError):
-            self.blob_storage.delete(blob.blob_hash)
+        if err.check(ConnectionDone):
+            return
+        elif err.check(DownloadCanceledError):
+            log.warning("Failed to receive %s", blob)
+            return self.blob_storage.delete(blob.blob_hash)
         else:
             log.exception(err)
+            return self.blob_storage.delete(blob.blob_hash)
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
-        yield self.blob_storage.completed(blob.blob_hash)
+        yield self.blob_storage.completed(blob.blob_hash, blob.length)
         yield self.close_blob()
+        response = yield self.send_response({response_key: True})
         log.info("Received %s", blob)
-        yield self.send_response({response_key: True})
+        defer.returnValue(response)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
@@ -73,8 +78,8 @@ class ReflectorServerProtocol(Protocol):
 
         response_key will either be received_blob or received_sd_blob
         """
-
         blob = self.incoming_blob
+
         self.blob_finished_d, self.blob_write, self.cancel_write = blob.open_for_writing(self.peer)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
@@ -145,7 +150,6 @@ class ReflectorServerProtocol(Protocol):
         return True
 
     def handle_request(self, request_dict):
-        log.debug("<-- %s - %s", self.peer.host, request_dict)
         if self.need_handshake():
             return self.handle_handshake(request_dict)
         if self.is_descriptor_request(request_dict):

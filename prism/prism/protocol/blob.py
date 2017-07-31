@@ -11,8 +11,8 @@ from twisted.python.failure import Failure
 from zope.interface import implements
 from Crypto.Hash import SHA384
 
-from constants import BLOB_HASH_LENGTH, BLOB_SIZE
-from error import InvalidDataError, DownloadCanceledError
+from prism.constants import BLOB_HASH_LENGTH, BLOB_SIZE
+from prism.error import InvalidDataError, DownloadCanceledError
 
 log = logging.getLogger(__name__)
 
