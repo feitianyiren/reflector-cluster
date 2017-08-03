@@ -1,5 +1,7 @@
 blob directory: $HOME/.prism
 
+listen: 127.0.0.1
+
 hosts:
  - jack.lbry.tech
 
