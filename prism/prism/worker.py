@@ -1,7 +1,6 @@
 import os
 import sys
 
-import prism
 from prism.config import get_settings
 from prism.task import process_blob
 

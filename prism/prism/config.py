@@ -24,7 +24,6 @@ def get_settings():
     default_conf = {
         HOSTS: {
             1: "jack.lbry.tech",
-            2: "jack.lbry.tech",
         },
         MAX_BLOBS_PER_HOST: 10,
         BLOB_DIR: os.path.expanduser("~/.prism")
@@ -34,6 +33,8 @@ def get_settings():
 
     for k in default_conf:
         if k in conf_file_data:
+            if isinstance(settings_types[k], dict) and isinstance(conf_file_data[k], list):
+                settings[k] = {i + 1: conf_file_data[k][i] for i in range(len(conf_file_data[k]))}
             settings[k] = settings_types[k](conf_file_data[k])
         else:
             settings[k] = default_conf[k]
