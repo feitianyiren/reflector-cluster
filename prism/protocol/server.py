@@ -1,7 +1,7 @@
 import json
 import logging
 
-from twisted.internet import defer, error
+from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
 from twisted.internet.error import ConnectionDone
@@ -81,6 +81,7 @@ class ReflectorServerProtocol(Protocol):
         blob = self.incoming_blob
 
         self.blob_finished_d, self.blob_write, self.cancel_write = blob.open_for_writing(self.peer)
+        self.blob_finished_d.addTimeout(10, reactor, onTimeoutCancel=self.cancel_write)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
 
