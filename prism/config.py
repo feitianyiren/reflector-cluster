@@ -38,7 +38,8 @@ def get_settings():
         if k in conf_file_data:
             if isinstance(settings_types[k], dict) and isinstance(conf_file_data[k], list):
                 settings[k] = {i + 1: conf_file_data[k][i] for i in range(len(conf_file_data[k]))}
-            settings[k] = settings_types[k](conf_file_data[k])
+            else:
+                settings[k] = settings_types[k](conf_file_data[k])
         else:
             settings[k] = default_conf[k]
     return settings
