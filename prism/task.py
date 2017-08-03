@@ -9,12 +9,12 @@ random.seed(None)
 
 SETTINGS = get_settings()
 HOSTS = SETTINGS['hosts']
-NUM_HOSTS = len(HOSTS)
+NUM_HOSTS = len(HOSTS) - 1
 BLOB_DIR = os.path.expandvars(SETTINGS['blob directory'])
 
 
 def host_for_blob(blob_hash):
-    host = HOSTS[random.randint(1, NUM_HOSTS)]
+    host = HOSTS[random.randint(0, NUM_HOSTS)]
     if ":" in host:
         address, port = host.split(":")
     else:
