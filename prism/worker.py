@@ -9,7 +9,7 @@ from rq import Queue
 
 settings = get_settings()
 
-BLOB_DIR = settings['blob directory']
+BLOB_DIR = os.path.expandvars(settings['blob directory'])
 
 
 def main():
