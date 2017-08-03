@@ -14,14 +14,17 @@ def get_settings():
     HOSTS = "hosts"
     MAX_BLOBS_PER_HOST = "max blobs"
     BLOB_DIR = "blob directory"
+    LISTEN_ON = "listen"
 
     settings_types = {
+        LISTEN_ON: str,
         HOSTS: dict,
         MAX_BLOBS_PER_HOST: int,
         BLOB_DIR: str,
     }
 
     default_conf = {
+        LISTEN_ON: "localhost",
         HOSTS: {
             1: "jack.lbry.tech",
         },
