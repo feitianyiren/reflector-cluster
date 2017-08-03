@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 
 from prism.config import get_settings
@@ -36,13 +37,11 @@ class ClusterStorage(object):
             reactor.addSystemEventTrigger("before", "shutdown", self.stop)
         else:
             raise AlreadyStarted()
-        defer.returnValue(None)
 
     @defer.inlineCallbacks
     def stop(self):
         if self.db:
             yield self.db.disconnect()
-        defer.returnValue(None)
 
     @defer.inlineCallbacks
     def get_host_counts(self):
@@ -52,7 +51,7 @@ class ClusterStorage(object):
         defer.returnValue(result)
 
     @defer.inlineCallbacks
-    def blob_exists(self, blob_hash):
+    def blob_exists_locally(self, blob_hash):
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError()
         exists = yield self.db.hexists(BLOB_HASHES, blob_hash)
@@ -66,20 +65,66 @@ class ClusterStorage(object):
         defer.returnValue(in_cluster)
 
     @defer.inlineCallbacks
+    def stream_in_cluster(self, sd_hash):
+        """
+        Return a tuple of (bool) <stream_in_cluster>, (list) <known_needed_blobs>
+        """
+
+        in_cluster = yield self.blob_in_cluster(sd_hash)
+        needed = []
+
+        if in_cluster:
+            blobs_in_stream = yield self.db.smembers(sd_hash)
+            for blob_hash in blobs_in_stream:
+                blob_in_cluster = yield self.blob_in_cluster(blob_hash)
+                if not blob_in_cluster:
+                    blob_exists = yield self.blob_exists_locally(blob_hash)
+                    if not blob_exists:
+                        needed.append(blob_hash)
+        else:
+            sd_blob = yield self.get_blob(sd_hash)
+            if sd_blob.is_validated():
+                in_cluster = True
+                needed = yield self.determine_missing_local_blobs(sd_blob)
+
+        defer.returnValue((in_cluster, needed))
+
+    @defer.inlineCallbacks
+    def determine_missing_local_blobs(self, sd_blob):
+        needed = []
+        decoded_sd = yield self.load_sd_blob(sd_blob)
+        for blob_info in decoded_sd['blobs']:
+            if 'blob_hash' in blob_info and 'length' in blob_info:
+                blob_hash, blob_len = blob_info['blob_hash'], blob_info['length']
+                in_cluster = yield self.blob_in_cluster(blob_hash)
+                if not in_cluster:
+                    blob = yield self.get_blob(blob_hash, blob_len)
+                    if not blob.is_validated():
+                        needed.append(blob_hash)
+        defer.returnValue(needed)
+
+    @defer.inlineCallbacks
+    def load_sd_blob(self, sd_blob):
+        with sd_blob.open_for_reading() as sd_file:
+            sd_blob_data = sd_file.read()
+        decoded_sd_blob = json.loads(sd_blob_data)
+        for blob in decoded_sd_blob['blobs']:
+            if 'blob_hash' in blob and 'length' in blob:
+                blob_hash, blob_len = blob['blob_hash'], blob['length']
+                yield self.db.sadd(sd_blob.blob_hash, blob_hash)
+        defer.returnValue(decoded_sd_blob)
+
+    @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):
         if length is None:
-            known = yield self.blob_exists(blob_hash)
-            if known:
-                length = yield self.db.hget(BLOB_HASHES, blob_hash)
-            else:
-                raise InvalidBlobHashError()
+            length = yield self.db.hget(BLOB_HASHES, blob_hash)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
 
     @defer.inlineCallbacks
     def delete(self, blob_hash):
         log.info("Delete %s", blob_hash)
-        exists = yield self.blob_exists(blob_hash)
+        exists = yield self.blob_exists_locally(blob_hash)
         if exists:
             blob_length = yield self.db.hget(BLOB_HASHES, blob_hash)
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
@@ -91,11 +136,7 @@ class ClusterStorage(object):
 
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
-        exists = yield self.blob_exists(blob_hash)
-        if not exists:
-            if len(blob_hash) != BLOB_HASH_LENGTH:
-                raise InvalidBlobHashError()
-            was_set = yield self.db.hset(BLOB_HASHES, blob_hash, blob_length)
-            defer.returnValue(was_set)
-        else:
-            defer.returnValue(True)
+        if len(blob_hash) != BLOB_HASH_LENGTH:
+            raise InvalidBlobHashError()
+        was_set = yield self.db.hset(BLOB_HASHES, blob_hash, blob_length)
+        defer.returnValue(was_set)

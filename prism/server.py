@@ -26,11 +26,6 @@ class PrismServer(service.Service):
 
 
 def main():
-    log = logging.getLogger()
-    h = logging.StreamHandler()
-    log.setLevel(logging.INFO)
-    log.addHandler(h)
-
     prism_server = PrismServer()
     reactor.addSystemEventTrigger("before", "startup", prism_server.startService)
     reactor.addSystemEventTrigger("before", "shutdown", prism_server.stopService)

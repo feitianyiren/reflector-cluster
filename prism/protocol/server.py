@@ -219,53 +219,28 @@ class ReflectorServerProtocol(Protocol):
         sd_blob_size = request_dict[SD_BLOB_SIZE]
 
         if self.blob_write is None:
-            d = self.blob_storage.get_blob(sd_blob_hash, sd_blob_size)
-            d.addCallback(self.get_descriptor_response)
+            d = self.get_descriptor_response(sd_blob_hash, sd_blob_size)
             d.addCallback(self.send_response)
         else:
             self.receiving_blob = True
             d = self.blob_finished_d
         return d
 
-    def get_descriptor_response(self, sd_blob):
-        if sd_blob.is_validated():
-            d = defer.succeed({SEND_SD_BLOB: False})
-            d.addCallback(self.request_needed_blobs, sd_blob)
+    @defer.inlineCallbacks
+    def get_descriptor_response(self, sd_hash, sd_size):
+        in_cluster, needed = yield self.blob_storage.stream_in_cluster(sd_hash)
+        if in_cluster:
+            response = {
+                SEND_SD_BLOB: False,
+                NEEDED_BLOBS: needed
+            }
         else:
+            sd_blob = yield self.blob_storage.get_blob(sd_hash, sd_size)
             self.incoming_blob = sd_blob
             self.receiving_blob = True
             self.handle_incoming_blob(RECEIVED_SD_BLOB)
-            d = defer.succeed({SEND_SD_BLOB: True})
-        return d
-
-    def request_needed_blobs(self, response, sd_blob):
-        def _add_needed_blobs_to_response(needed_blobs):
-            response.update({NEEDED_BLOBS: needed_blobs})
-            return response
-
-        d = self.determine_missing_blobs(sd_blob)
-        d.addCallback(_add_needed_blobs_to_response)
-        return d
-
-    def determine_missing_blobs(self, sd_blob):
-        with sd_blob.open_for_reading() as sd_file:
-            sd_blob_data = sd_file.read()
-        decoded_sd_blob = json.loads(sd_blob_data)
-        return self.get_unvalidated_blobs_in_stream(decoded_sd_blob)
-
-    def get_unvalidated_blobs_in_stream(self, sd_blob):
-        dl = defer.DeferredList(list(self._iter_unvalidated_blobs_in_stream(sd_blob)),
-                                consumeErrors=True)
-        dl.addCallback(lambda needed: [blob[1] for blob in needed if blob[1]])
-        return dl
-
-    def _iter_unvalidated_blobs_in_stream(self, sd_blob):
-        for blob in sd_blob['blobs']:
-            if 'blob_hash' in blob and 'length' in blob:
-                blob_hash, blob_len = blob['blob_hash'], blob['length']
-                d = self.blob_storage.get_blob(blob_hash, blob_len)
-                d.addCallback(lambda blob: blob_hash if not blob.is_validated() else None)
-                yield d
+            response = {SEND_SD_BLOB: True}
+        defer.returnValue(response)
 
     def handle_blob_request(self, request_dict):
         """
@@ -292,8 +267,7 @@ class ReflectorServerProtocol(Protocol):
 
         if self.blob_write is None:
             log.debug('Received info for blob: %s', blob_hash[:16])
-            d = self.blob_storage.get_blob(blob_hash, blob_size)
-            d.addCallback(self.get_blob_response)
+            d = self.get_blob_response(blob_hash, blob_size)
             d.addCallback(self.send_response)
         else:
             log.debug('blob is already open')
@@ -301,12 +275,19 @@ class ReflectorServerProtocol(Protocol):
             d = self.blob_finished_d
         return d
 
-    def get_blob_response(self, blob):
-        if blob.is_validated():
-            return defer.succeed({SEND_BLOB: False})
+    @defer.inlineCallbacks
+    def get_blob_response(self, blob_hash, blob_size):
+        in_cluster = yield self.blob_storage.blob_in_cluster(blob_hash)
+        if in_cluster:
+            response = {SEND_BLOB: False}
         else:
-            self.incoming_blob = blob
-            self.receiving_blob = True
-            self.handle_incoming_blob(RECEIVED_BLOB)
-            d = defer.succeed({SEND_BLOB: True})
-        return d
+            exists_locally = yield self.blob_storage.blob_exists_locally(blob_hash)
+            if exists_locally:
+                response = {SEND_BLOB: False}
+            else:
+                blob = yield self.blob_storage.get_blob(blob_hash, blob_size)
+                self.incoming_blob = blob
+                self.receiving_blob = True
+                self.handle_incoming_blob(RECEIVED_BLOB)
+                response = {SEND_BLOB: True}
+        defer.returnValue(response)

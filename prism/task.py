@@ -22,7 +22,7 @@ def host_for_blob(blob_hash):
     return address, int(port)
 
 
-def process_blob(blob_hash):
+def process_blob(blob_hash, remaining):
     redis_conn = Redis()
     blob_path = os.path.join(BLOB_DIRECTORY, blob_hash)
     if not os.path.isfile(blob_path):
@@ -35,6 +35,6 @@ def process_blob(blob_hash):
         redis_conn.sadd(host, blob_hash)
         redis_conn.sadd("cluster_blobs", blob_hash)
         os.remove(blob_path)
-        print "Forwarded %s --> %s" % (blob_hash[:8], host)
+        print "Forwarded %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)
     else:
-        print "Failed to forward %s --> %s" % (blob_hash[:8], host)
+        print "Failed to forward %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)

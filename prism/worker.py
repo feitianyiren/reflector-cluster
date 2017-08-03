@@ -21,9 +21,9 @@ def main():
 
     blobs = os.listdir(BLOB_DIR)
 
-    for blob_hash in blobs:
+    for i, blob_hash in enumerate(blobs):
         print "Process ", blob_hash
-        q.enqueue(process_blob, blob_hash)
+        q.enqueue(process_blob, blob_hash, len(blobs) - i - 1)
 
 
 if __name__ == "__main__":
