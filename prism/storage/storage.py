@@ -25,7 +25,7 @@ MAX_BLOBS_PER_HOST = conf['max blobs']
 class ClusterStorage(object):
     def __init__(self, path=None):
         self.db = None
-        self.db_dir = path or conf['blob directory']
+        self.db_dir = path or os.path.expandvars(conf['blob directory'])
         if not os.path.isdir(self.db_dir):
             raise OSError("blob storage directory \"%s\" does not exist" % self.db_dir)
         reactor.addSystemEventTrigger("after", "startup", self.start)
