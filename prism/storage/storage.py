@@ -14,7 +14,6 @@ conf = get_settings()
 
 # table names
 BLOB_HASHES = "blob_hashes"
-CLUSTER_HOSTS = "cluster_hosts"
 CLUSTER_BLOBS = "cluster_blobs"
 
 # set of node addresses
@@ -58,6 +57,13 @@ class ClusterStorage(object):
             raise InvalidBlobHashError()
         exists = yield self.db.hexists(BLOB_HASHES, blob_hash)
         defer.returnValue(exists)
+
+    @defer.inlineCallbacks
+    def blob_in_cluster(self, blob_hash):
+        if len(blob_hash) != BLOB_HASH_LENGTH:
+            raise InvalidBlobHashError()
+        in_cluster = yield self.db.sismember(CLUSTER_BLOBS, blob_hash)
+        defer.returnValue(in_cluster)
 
     @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):

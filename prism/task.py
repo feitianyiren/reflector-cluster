@@ -33,6 +33,7 @@ def process_blob(blob_hash):
 
     if blobs_sent[0] == blob_hash:
         redis_conn.sadd(host, blob_hash)
+        redis_conn.sadd("cluster_blobs", blob_hash)
         os.remove(blob_path)
         print "Forwarded %s --> %s" % (blob_hash[:8], host)
     else:
