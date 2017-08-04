@@ -17,12 +17,12 @@ LISTEN_ON = settings['listen']
 class PrismServer(service.Service):
     def __init__(self, port_num=5566):
         self.port_num = port_num
-        self.cluster_storage = None
+        self.cluster_storage = ClusterStorage()
         self._port = None
 
     def startService(self):
-        log.info("Starting prism server (pid %i), listening on %s", os.getpid(), LISTEN_ON)
-        self.cluster_storage = ClusterStorage()
+        log.info("Starting prism server (pid %i), listening on %s (reactor: %s)", os.getpid(),
+                 LISTEN_ON, reactor)
         self._port = reactor.listenTCP(self.port_num, PrismServerFactory(self.cluster_storage),
                                        50, LISTEN_ON)
 

@@ -1,4 +1,6 @@
 import logging
+from twisted.internet import selectreactor
+selectreactor.install()
 
 log = logging.getLogger()
 h = logging.StreamHandler()
