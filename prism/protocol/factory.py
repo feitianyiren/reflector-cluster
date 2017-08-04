@@ -40,3 +40,6 @@ class PrismClientFactory(ClientFactory):
         p.addr = addr
         self.p = p
         return p
+
+    def startFactory(self):
+        self.storage.start()
