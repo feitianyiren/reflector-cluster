@@ -35,6 +35,6 @@ def process_blob(blob_hash, remaining):
         redis_conn.sadd(host, blob_hash)
         redis_conn.sadd("cluster_blobs", blob_hash)
         os.remove(blob_path)
-        print "Forwarded %s --> %s, %i remaining" % (blob_hash[:8], host, rem)
+        print "Forwarded %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)
     else:
         print "Failed to forward %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)
