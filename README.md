@@ -10,4 +10,4 @@ server with `prism-server` and run the worker with `prism-worker`.
 ### Configuration
 
 The data directory (used as a blob cache while awaiting forwarding) defaults to `~/.prism`. 
-Hosts can be added by providing their details in `prism.yml` in the data directory.
+Hosts can be added by providing their details in `~/.prism.yml`.
