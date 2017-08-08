@@ -1,5 +1,6 @@
 import os
 import random
+import datetime
 from redis import Redis
 
 from prism.forward import forward_blobs
@@ -35,7 +36,10 @@ def process_blob(blob_hash, remaining):
         raise OSError(blob_hash + " does not exist")
 
     host, port, host_blob_count = next_host(redis_conn)
+
+    start_time = datetime.datetime.now()
     blobs_sent = forward_blobs(BLOB_DIR, host, port, blob_hash)
+    print "sending blob took " + str(datetime.datetime.now() - start_time)
 
     if blobs_sent[0] == blob_hash:
         redis_conn.sadd(host, blob_hash)
