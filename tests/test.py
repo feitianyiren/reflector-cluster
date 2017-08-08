@@ -10,7 +10,7 @@ from rq import Queue
 
 settings = config.get_settings()
 
-BLOB_DIR = settings["blob directory"]
+BLOB_DIR = os.path.expandvars(settings["blob directory"])
 BLOB_SIZE = 1024 * 1024 * 2
 
 
