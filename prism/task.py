@@ -13,13 +13,18 @@ NUM_HOSTS = len(HOSTS) - 1
 BLOB_DIR = os.path.expandvars(SETTINGS['blob directory'])
 
 
-def host_for_blob(blob_hash):
-    host = HOSTS[random.randint(0, NUM_HOSTS)]
-    if ":" in host:
+def next_host(db):
+    host_info = {}
+    for host in HOSTS:
+        if ":" in host:
+            address, port = host.split(":")
+        else:
+            address, port = host, 5566
+        count = db.scard(address)
+        host_info["%s:%i" % (address, port)] = count
+    for host, blob_count in sorted(host_info.iteritems(), key=lambda x: x[1]):
         address, port = host.split(":")
-    else:
-        address, port = host, 5566
-    return address, int(port)
+        return address, int(port), blob_count
 
 
 def process_blob(blob_hash, remaining):
@@ -28,13 +33,14 @@ def process_blob(blob_hash, remaining):
     if not os.path.isfile(blob_path):
         raise OSError(blob_hash + " does not exist")
 
-    host, port = host_for_blob(blob_hash)
+    host, port, host_blob_count = next_host(redis_conn)
     blobs_sent = forward_blobs(BLOB_DIR, host, port, blob_hash)
 
     if blobs_sent[0] == blob_hash:
         redis_conn.sadd(host, blob_hash)
         redis_conn.sadd("cluster_blobs", blob_hash)
         os.remove(blob_path)
-        print "Forwarded %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)
+        print "Forwarded %s --> %s, %i remaining, host has %i blobs" % (blob_hash[:8], host,
+                                                                        remaining, host_blob_count)
     else:
         print "Failed to forward %s --> %s, %i remaining" % (blob_hash[:8], host, remaining)
