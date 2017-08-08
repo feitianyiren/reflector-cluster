@@ -2,13 +2,15 @@ import hashlib
 import os
 import sys
 
+from prism import config
 from prism.task import process_blob
 
 from redis import Redis
 from rq import Queue
 
-DIR = os.path.dirname(os.path.realpath(__file__))
-BLOB_DIR = os.path.join(DIR, "blobs")
+settings = config.get_settings()
+
+BLOB_DIR = settings["blob directory"]
 BLOB_SIZE = 1024 * 1024 * 2
 
 
@@ -32,10 +34,10 @@ def main():
         blob_path = os.path.join(BLOB_DIR, blob_hash)
         with open(blob_path, 'wb') as f:
             f.write(blob_contents)
-        blobs.append(blob_path)
+        blobs.append(blob_hash)
 
-    for blob_path in blobs:
-        q.enqueue(process_blob, blob_path)
+    for blob_hash in blobs:
+        q.enqueue(process_blob, blob_hash, 1)
 
 
 if __name__ == "__main__":
