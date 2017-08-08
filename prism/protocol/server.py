@@ -13,7 +13,6 @@ from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRe
 from prism.error import ReflectorClientVersionError
 from prism.protocol.blob import is_valid_blobhash
 
-from prism.task import process_blob
 
 from redis import Redis
 from rq import Queue
@@ -67,6 +66,7 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
+        from prism.task import process_blob
         blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         yield self.close_blob()
