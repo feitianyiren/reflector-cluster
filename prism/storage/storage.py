@@ -4,7 +4,7 @@ import logging
 
 from prism.config import get_settings
 from prism.constants import BLOB_HASH_LENGTH
-from prism.error import AlreadyStarted, InvalidBlobHashError
+from prism.error import InvalidBlobHashError
 from prism.protocol.blob import BlobFile
 from prism.storage import txredisapi as redis
 from twisted.internet import defer, reactor
@@ -42,25 +42,20 @@ class ClusterStorage(object):
             yield self.db.disconnect()
 
     @defer.inlineCallbacks
-    def get_host_counts(self):
-        result = {}
-        for addr in CLUSTER_NODE_ADDRESSES:
-            result[addr] = yield self.db.scard(addr)
-        defer.returnValue(result)
-
-    @defer.inlineCallbacks
-    def blob_exists_locally(self, blob_hash):
+    def blob_exists(self, blob_hash):
+        """True if blob file exists in the cluster"""
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError()
         exists = yield self.db.hexists(BLOB_HASHES, blob_hash)
         defer.returnValue(exists)
 
     @defer.inlineCallbacks
-    def blob_in_cluster(self, blob_hash):
+    def blob_has_been_forwarded_to_host(self, blob_hash):
+        """True if the blob has been sent to a host"""
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError()
-        in_cluster = yield self.db.sismember(CLUSTER_BLOBS, blob_hash)
-        defer.returnValue(in_cluster)
+        sent_to_host = yield self.db.sismember(CLUSTER_BLOBS, blob_hash)
+        defer.returnValue(sent_to_host)
 
     @defer.inlineCallbacks
     def stream_in_cluster(self, sd_hash):
@@ -68,24 +63,24 @@ class ClusterStorage(object):
         Return a tuple of (bool) <stream_in_cluster>, (list) <known_needed_blobs>
         """
 
-        in_cluster = yield self.blob_in_cluster(sd_hash)
-        needed = []
+        stream_forwarding_started = yield self.blob_has_been_forwarded_to_host(sd_hash)
+        missing_blobs = []
 
-        if in_cluster:
+        if stream_forwarding_started:
             blobs_in_stream = yield self.db.smembers(sd_hash)
             for blob_hash in blobs_in_stream:
-                blob_in_cluster = yield self.blob_in_cluster(blob_hash)
+                blob_in_cluster = yield self.blob_has_been_forwarded_to_host(blob_hash)
                 if not blob_in_cluster:
-                    blob_exists = yield self.blob_exists_locally(blob_hash)
+                    blob_exists = yield self.blob_exists(blob_hash)
                     if not blob_exists:
-                        needed.append(blob_hash)
+                        missing_blobs.append(blob_hash)
         else:
             sd_blob = yield self.get_blob(sd_hash)
             if sd_blob.is_validated():
-                in_cluster = True
-                needed = yield self.determine_missing_local_blobs(sd_blob)
+                stream_forwarding_started = True
+                missing_blobs = yield self.determine_missing_local_blobs(sd_blob)
 
-        defer.returnValue((in_cluster, needed))
+        defer.returnValue((stream_forwarding_started, missing_blobs))
 
     @defer.inlineCallbacks
     def determine_missing_local_blobs(self, sd_blob):
@@ -94,7 +89,7 @@ class ClusterStorage(object):
         for blob_info in decoded_sd['blobs']:
             if 'blob_hash' in blob_info and 'length' in blob_info:
                 blob_hash, blob_len = blob_info['blob_hash'], blob_info['length']
-                in_cluster = yield self.blob_in_cluster(blob_hash)
+                in_cluster = yield self.blob_has_been_forwarded_to_host(blob_hash)
                 if not in_cluster:
                     blob = yield self.get_blob(blob_hash, blob_len)
                     if not blob.is_validated():
@@ -122,7 +117,7 @@ class ClusterStorage(object):
     @defer.inlineCallbacks
     def delete(self, blob_hash):
         log.info("Delete %s", blob_hash)
-        exists = yield self.blob_exists_locally(blob_hash)
+        exists = yield self.blob_exists(blob_hash)
         if exists:
             blob_length = yield self.db.hget(BLOB_HASHES, blob_hash)
             blob = BlobFile(self.db_dir, blob_hash, blob_length)

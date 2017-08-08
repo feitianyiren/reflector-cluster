@@ -13,6 +13,13 @@ from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRe
 from prism.error import ReflectorClientVersionError
 from prism.protocol.blob import is_valid_blobhash
 
+from prism.task import process_blob
+
+from redis import Redis
+from rq import Queue
+
+redis_conn = Redis()
+q = Queue(connection=redis_conn)
 
 log = logging.getLogger(__name__)
 
@@ -60,8 +67,10 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
+        blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         yield self.close_blob()
+        q.enqueue(process_blob, blob_hash, 1)
         response = yield self.send_response({response_key: True})
         log.info("Received %s", blob)
         defer.returnValue(response)
@@ -278,11 +287,11 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def get_blob_response(self, blob_hash, blob_size):
-        in_cluster = yield self.blob_storage.blob_in_cluster(blob_hash)
+        in_cluster = yield self.blob_storage.blob_has_been_forwarded_to_host(blob_hash)
         if in_cluster:
             response = {SEND_BLOB: False}
         else:
-            exists_locally = yield self.blob_storage.blob_exists_locally(blob_hash)
+            exists_locally = yield self.blob_storage.blob_exists(blob_hash)
             if exists_locally:
                 response = {SEND_BLOB: False}
             else:
