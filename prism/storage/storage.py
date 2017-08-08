@@ -35,8 +35,6 @@ class ClusterStorage(object):
         if self.db is None:
             self.db = yield redis.ConnectionPool()
             reactor.addSystemEventTrigger("before", "shutdown", self.stop)
-        else:
-            raise AlreadyStarted()
 
     @defer.inlineCallbacks
     def stop(self):

@@ -42,4 +42,4 @@ class PrismClientFactory(ClientFactory):
         return p
 
     def startFactory(self):
-        self.storage.start()
+        return self.storage.start()
