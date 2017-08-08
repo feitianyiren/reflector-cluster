@@ -19,7 +19,7 @@ def main():
     if not os.path.isdir(BLOB_DIR):
         os.mkdir(BLOB_DIR)
 
-    blobs = os.listdir(BLOB_DIR)
+    blobs = os.listdir(BLOB_DIR)[:10000]
 
     for i, blob_hash in enumerate(blobs):
         print "Process ", blob_hash
