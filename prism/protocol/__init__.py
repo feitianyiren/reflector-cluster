@@ -1,1 +1,1 @@
-from factory import PrismServerFactory, PrismClientFactory
+from factory import PrismServerFactory

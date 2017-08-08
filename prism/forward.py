@@ -1,7 +1,7 @@
 from twisted.internet import reactor
 
-from prism.protocol import PrismClientFactory
-from prism.storage import ClusterStorage
+from prism.protocol.factory import PrismClientFactory
+from prism.storage.storage import ClusterStorage
 
 
 def forward_blobs(blob_dir, host, port, *blobs):
