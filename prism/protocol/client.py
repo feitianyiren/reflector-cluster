@@ -48,6 +48,8 @@ class BlobReflectorClient(Protocol):
     def connectionLost(self, reason):
         if reason.check(error.ConnectionDone):
             log.debug('Reflector finished: %s', reason)
+        else:
+            raise reason
         reactor.fireSystemEvent("shutdown")
 
     # IConsumer stuff
