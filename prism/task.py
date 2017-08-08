@@ -18,6 +18,7 @@ def next_host(db):
     for host in HOSTS:
         if ":" in host:
             address, port = host.split(":")
+            port = int(port)
         else:
             address, port = host, 5566
         count = db.scard(address)
