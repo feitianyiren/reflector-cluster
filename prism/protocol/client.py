@@ -4,7 +4,6 @@ import logging
 from twisted.protocols.basic import FileSender
 from twisted.internet.protocol import Protocol
 from twisted.internet import defer, error, reactor
-
 from prism.error import IncompleteResponse
 
 
@@ -15,22 +14,17 @@ class BlobReflectorClient(Protocol):
     #  Protocol stuff
 
     def connectionMade(self):
-        self.blob_hashes_sent = []
-        self.blob_storage = self.factory.storage
         self.response_buff = ''
         self.outgoing_buff = ''
-        self.blob_hashes_to_send = self.factory.blobs
         self.next_blob_to_send = None
         self.blob_read_handle = None
         self.received_handshake_response = False
-        self.protocol_version = self.factory.protocol_version
         self.file_sender = None
         self.producer = None
         self.streaming = False
         self.sent_blobs = False
         d = self.send_handshake()
-        d.addErrback(
-            lambda err: log.warning("An error occurred immediately: %s", err.getTraceback()))
+        d.addErrback(lambda err: log.warning("An error occurred immediately: %s", err.getTraceback()))
 
     def dataReceived(self, data):
         log.debug('Received %s', data)
@@ -53,12 +47,10 @@ class BlobReflectorClient(Protocol):
         reactor.fireSystemEvent("shutdown")
 
     # IConsumer stuff
-
     def registerProducer(self, producer, streaming):
         self.producer = producer
         self.streaming = streaming
         if self.streaming is False:
-            from twisted.internet import reactor
             reactor.callLater(0, self.producer.resumeProducing)
 
     def unregisterProducer(self):
@@ -67,7 +59,6 @@ class BlobReflectorClient(Protocol):
     def write(self, data):
         self.transport.write(data)
         if self.producer is not None and self.streaming is False:
-            from twisted.internet import reactor
             reactor.callLater(0, self.producer.resumeProducing)
 
     def send_handshake(self):
@@ -100,8 +91,8 @@ class BlobReflectorClient(Protocol):
 
     def start_transfer(self):
         self.sent_blobs = True
-        assert self.read_handle is not None, \
-            "self.read_handle was None when trying to start the transfer"
+        if self.read_handle is None:
+            raise Exception("self.read_handle was None when trying to start the transfer")
         d = self.file_sender.beginFileTransfer(self.read_handle, self)
         return d
 
@@ -109,6 +100,7 @@ class BlobReflectorClient(Protocol):
         if 'version' not in response_dict:
             raise ValueError("Need protocol version number!")
         server_version = int(response_dict['version'])
+
         if self.protocol_version != server_version:
             raise ValueError("I can't handle protocol version {}!".format(self.protocol_version))
         self.received_handshake_response = True

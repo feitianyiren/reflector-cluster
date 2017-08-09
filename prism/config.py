@@ -15,12 +15,14 @@ def get_settings():
     MAX_BLOBS_PER_HOST = "max blobs"
     BLOB_DIR = "blob directory"
     LISTEN_ON = "listen"
+    WORKERS = "workers"
 
     settings_types = {
         LISTEN_ON: str,
         HOSTS: dict,
         MAX_BLOBS_PER_HOST: int,
         BLOB_DIR: str,
+        WORKERS: int,
     }
 
     default_conf = {
@@ -29,7 +31,8 @@ def get_settings():
             1: "jack.lbry.tech",
         },
         MAX_BLOBS_PER_HOST: 10,
-        BLOB_DIR: os.path.expanduser("~/.prism")
+        BLOB_DIR: os.path.expanduser("~/.prism"),
+        WORKERS: 10,
     }
 
     settings = {}

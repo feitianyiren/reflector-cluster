@@ -3,8 +3,8 @@ import logging
 from twisted.internet import reactor
 from twisted.application import service
 
-from prism.protocol import PrismServerFactory
-from prism.storage import ClusterStorage
+from prism.protocol.factory import PrismServerFactory
+from prism.storage.storage import ClusterStorage
 from prism.config import get_settings
 
 log = logging.getLogger(__name__)

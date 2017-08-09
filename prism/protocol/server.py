@@ -1,5 +1,10 @@
 import json
+import os
+import random
+import datetime
 import logging
+from redis import Redis
+from rq import Queue
 
 from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
@@ -12,24 +17,80 @@ from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
 from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
 from prism.error import ReflectorClientVersionError
 from prism.protocol.blob import is_valid_blobhash
+from prism.storage.storage import ClusterStorage
+from prism.config import get_settings
 
+random.seed(None)
 
-from redis import Redis
-from rq import Queue
-
-redis_conn = Redis()
-q = Queue(connection=redis_conn)
+settings = get_settings()
+BLOB_DIR = os.path.expandvars(settings['blob directory'])
+SETTINGS = get_settings()
+HOSTS = SETTINGS['hosts']
+NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
+
+
+def next_host(db):
+    host_info = {}
+    for host in HOSTS:
+        if ":" in host:
+            address, port = host.split(":")
+            port = int(port)
+        else:
+            address, port = host, 5566
+        count = db.scard(address)
+        host_info["%s:%i" % (address, port)] = count
+    for host, blob_count in sorted(host_info.iteritems(), key=lambda x: x[1]):
+        address, port = host.split(":")
+        return address, int(port), blob_count
+
+
+def push_blob(host, port, factory):
+    from twisted.internet import reactor
+    reactor.connectTCP(host, port, factory)
+    reactor.run()
+    blobs_sent = factory.p.blob_hashes_sent
+    return blobs_sent
+
+
+def process_blob(blob_hash, client_factory_class):
+    start_time = datetime.datetime.now()
+
+    blob_path = os.path.join(BLOB_DIR, blob_hash)
+    if not os.path.isfile(blob_path):
+        raise OSError(blob_hash + " does not exist")
+
+    redis_conn = Redis()
+    host, port, host_blob_count = next_host(redis_conn)
+    factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
+
+    blobs_sent = push_blob(host, port, factory)
+    log.info("sending blob took " + str(datetime.datetime.now() - start_time))
+
+    if blobs_sent[0] == blob_hash:
+        redis_conn.sadd(host, blob_hash)
+        redis_conn.sadd("cluster_blobs", blob_hash)
+        os.remove(blob_path)
+        log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
+                 host_blob_count)
+    else:
+        log.info("Failed to forward %s --> %s", blob_hash[:8], host)
+
+
+def enqueue_blob(blob_hash, client_factory_class, worker_iterator):
+    redis_conn = Redis()
+    q = Queue(next(iter(worker_iterator)), connection=redis_conn)
+    q.enqueue(process_blob, blob_hash, client_factory_class)
 
 
 class ReflectorServerProtocol(Protocol):
     def connectionMade(self):
         peer_info = self.transport.getPeer()
         log.debug('Connected to %s:%i', peer_info.host, peer_info.port)
-
         self.protocol_version = self.factory.protocol_version
         self.blob_storage = self.factory.storage
+        self.client_factory = self.factory.client_factory
         self.peer = peer_info
         self.received_handshake = False
         self.peer_version = None
@@ -66,11 +127,10 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
-        from prism.task import process_blob
         blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         yield self.close_blob()
-        q.enqueue(process_blob, blob_hash, 1)
+        enqueue_blob(blob_hash, self.client_factory, self.worker_iterator)
         response = yield self.send_response({response_key: True})
         log.info("Received %s", blob)
         defer.returnValue(response)
