@@ -30,9 +30,9 @@ def get_settings():
         HOSTS: {
             1: "jack.lbry.tech",
         },
-        MAX_BLOBS_PER_HOST: 10,
+        MAX_BLOBS_PER_HOST: 50000,
         BLOB_DIR: os.path.expanduser("~/.prism"),
-        WORKERS: 10,
+        WORKERS: 4,
     }
 
     settings = {}
