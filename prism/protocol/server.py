@@ -1,11 +1,12 @@
 import json
 import os
 import random
-import datetime
+import time
 import logging
 from redis import Redis
 from rq import Queue
-
+from rq.timeouts import JobTimeoutException
+from redis.exceptions import ConnectionError
 from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
@@ -29,6 +30,17 @@ HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
+
+
+def retry_redis(fn):
+    def _wrapper(*a, **kw):
+        try:
+            return fn(*a, **kw)
+        except ConnectionError:
+            log.error("%s failed, retrying", fn)
+            time.sleep(10)
+            return fn(*a, **kw)
+    return _wrapper
 
 
 def next_host(db):
@@ -55,33 +67,31 @@ def push_blob(host, port, factory):
 
 
 def process_blob(blob_hash, client_factory_class):
-    start_time = datetime.datetime.now()
-
+    log.info("process blob pid %s", os.getpid())
     blob_path = os.path.join(BLOB_DIR, blob_hash)
     if not os.path.isfile(blob_path):
         raise OSError(blob_hash + " does not exist")
-
     redis_conn = Redis()
     host, port, host_blob_count = next_host(redis_conn)
     factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
-
-    blobs_sent = push_blob(host, port, factory)
-    log.info("sending blob took " + str(datetime.datetime.now() - start_time))
-
-    if blobs_sent[0] == blob_hash:
-        redis_conn.sadd(host, blob_hash)
-        redis_conn.sadd("cluster_blobs", blob_hash)
-        os.remove(blob_path)
-        log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
-                 host_blob_count)
-    else:
+    try:
+        blobs_sent = push_blob(host, port, factory)
+        if blobs_sent[0] == blob_hash:
+            redis_conn.sadd(host, blob_hash)
+            redis_conn.sadd("cluster_blobs", blob_hash)
+            os.remove(blob_path)
+            log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
+                     host_blob_count)
+        return
+    except JobTimeoutException:
         log.info("Failed to forward %s --> %s", blob_hash[:8], host)
 
 
-def enqueue_blob(blob_hash, client_factory_class, worker_iterator):
+@retry_redis
+def enqueue_blob(blob_hash, client_factory_class):
     redis_conn = Redis()
-    q = Queue(next(iter(worker_iterator)), connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, client_factory_class)
+    q = Queue(connection=redis_conn)
+    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
 
 
 class ReflectorServerProtocol(Protocol):
@@ -130,7 +140,7 @@ class ReflectorServerProtocol(Protocol):
         blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         yield self.close_blob()
-        enqueue_blob(blob_hash, self.client_factory, self.worker_iterator)
+        enqueue_blob(blob_hash, self.client_factory)
         response = yield self.send_response({response_key: True})
         log.info("Received %s", blob)
         defer.returnValue(response)
