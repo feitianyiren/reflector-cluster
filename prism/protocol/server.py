@@ -160,7 +160,6 @@ class ReflectorServerProtocol(Protocol):
         blob = self.incoming_blob
 
         self.blob_finished_d, self.blob_write, self.cancel_write = blob.open_for_writing(self.peer)
-        self.blob_finished_d.addTimeout(10, reactor, onTimeoutCancel=self.cancel_write)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
 
