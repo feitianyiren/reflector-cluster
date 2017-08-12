@@ -90,11 +90,7 @@ def process_blob(blob_hash, client_factory_class):
 def enqueue_blob(blob_hash, client_factory_class):
     redis_conn = Redis()
     q = Queue(connection=redis_conn)
-    try:
-        q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
-    except:
-        log.exception("enqueued process failed")
-        raise
+    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
 
 
 class ReflectorServerProtocol(Protocol):
