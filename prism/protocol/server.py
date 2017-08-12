@@ -138,11 +138,12 @@ class ReflectorServerProtocol(Protocol):
     def _on_completed_blob(self, blob, response_key):
         blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
+        if response_key == RECEIVED_SD_BLOB:
+            yield self.blob_storage.load_sd_blob(blob)
         yield self.close_blob()
-        enqueue_blob(blob_hash, self.client_factory)
-        response = yield self.send_response({response_key: True})
+        yield self.send_response({response_key: True})
         log.info("Received %s", blob)
-        defer.returnValue(response)
+        enqueue_blob(blob_hash, self.client_factory)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
@@ -306,8 +307,9 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def get_descriptor_response(self, sd_hash, sd_size):
-        in_cluster, needed = yield self.blob_storage.stream_in_cluster(sd_hash)
-        if in_cluster:
+        needed = yield self.blob_storage.get_needed_blobs_for_stream(sd_hash)
+
+        if needed is not None:
             response = {
                 SEND_SD_BLOB: False,
                 NEEDED_BLOBS: needed

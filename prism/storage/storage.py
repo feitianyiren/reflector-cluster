@@ -58,16 +58,15 @@ class ClusterStorage(object):
         defer.returnValue(sent_to_host)
 
     @defer.inlineCallbacks
-    def stream_in_cluster(self, sd_hash):
+    def get_needed_blobs_for_stream(self, sd_hash):
         """
-        Return a tuple of (bool) <stream_in_cluster>, (list) <known_needed_blobs>
+        Return a list of known_needed_blobs
         """
 
-        stream_forwarding_started = yield self.blob_has_been_forwarded_to_host(sd_hash)
+        blobs_in_stream = yield self.db.smembers(sd_hash)
         missing_blobs = []
 
-        if stream_forwarding_started:
-            blobs_in_stream = yield self.db.smembers(sd_hash)
+        if blobs_in_stream:
             for blob_hash in blobs_in_stream:
                 blob_in_cluster = yield self.blob_has_been_forwarded_to_host(blob_hash)
                 if not blob_in_cluster:
@@ -75,12 +74,14 @@ class ClusterStorage(object):
                     if not blob_exists:
                         missing_blobs.append(blob_hash)
         else:
-            sd_blob = yield self.get_blob(sd_hash)
-            if sd_blob.is_validated():
-                stream_forwarding_started = True
-                missing_blobs = yield self.determine_missing_local_blobs(sd_blob)
-
-        defer.returnValue((stream_forwarding_started, missing_blobs))
+            sd_exists_locally = yield self.blob_exists(sd_hash)
+            if sd_exists_locally:
+                sd_blob = yield self.get_blob(sd_hash)
+                if sd_blob.is_validated():
+                    missing_blobs = yield self.determine_missing_local_blobs(sd_blob)
+                    defer.returnValue(missing_blobs)
+            missing_blobs = None
+        defer.returnValue(missing_blobs)
 
     @defer.inlineCallbacks
     def determine_missing_local_blobs(self, sd_blob):
