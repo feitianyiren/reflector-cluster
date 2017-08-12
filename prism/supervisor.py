@@ -15,6 +15,7 @@ redis_conn = Redis()
 def show_cluster_info():
     blob_count = redis_conn.hlen("blob_hashes")
     cluster_blob_count = redis_conn.scard("cluster_blobs")
+
     click.echo('')
     click.echo('%i blobs completed, %i blobs in cluster' % (blob_count, cluster_blob_count))
     for host in HOSTS:
@@ -45,7 +46,7 @@ def main(cli_config, raw, by_queue, queues, **options):
 
     try:
         with Connection(cli_config.connection):
-            refresh(0.025, show_prism_info, queues, raw, by_queue,
+            refresh(0.1, show_prism_info, queues, raw, by_queue,
                     cli_config.queue_class, cli_config.worker_class)
     except ConnectionError as e:
         click.echo(e)
