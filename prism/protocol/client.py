@@ -144,9 +144,9 @@ class BlobReflectorClient(Protocol):
     def disconnect(self, err):
         self.transport.loseConnection()
 
-    def record_success_and_send_info(self):
+    def record_success(self, result):
         self.blob_hashes_sent.append(self.next_blob_to_send.blob_hash)
-        return self.send_blob_info()
+        return result
 
     def send_next_request(self):
         if self.file_sender is not None:
@@ -161,7 +161,8 @@ class BlobReflectorClient(Protocol):
             d = self.blob_storage.get_blob(blob_hash)
             d.addCallback(self.open_blob_for_reading)
             # send the server the next blob hash + length
-            d.addCallbacks(lambda _: self.record_success_and_send_info, self.disconnect)
+            d.addCallback(self.record_success)
+            d.addCallbacks(lambda _: self.send_blob_info())
             return d
         else:
             # close connection
