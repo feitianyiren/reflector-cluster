@@ -5,9 +5,8 @@ import time
 import logging
 from redis import Redis
 from rq import Queue
-from rq.timeouts import JobTimeoutException
 from redis.exceptions import ConnectionError
-from twisted.internet import defer, error, reactor
+from twisted.internet import defer, error
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
 from twisted.internet.error import ConnectionDone
@@ -58,40 +57,44 @@ def next_host(db):
         return address, int(port), blob_count
 
 
-def push_blob(host, port, factory):
-    from twisted.internet import reactor
-    reactor.connectTCP(host, port, factory)
-    reactor.run()
-    blobs_sent = factory.p.blob_hashes_sent
-    return blobs_sent
-
-
 def process_blob(blob_hash, client_factory_class):
+    import sys
+    from rq.timeouts import JobTimeoutException
+
     log.info("process blob pid %s", os.getpid())
     blob_path = os.path.join(BLOB_DIR, blob_hash)
     if not os.path.isfile(blob_path):
-        raise OSError(blob_hash + " does not exist")
+        log.warning("%s does not exist", blob_path)
+        return sys.exit(1)
     redis_conn = Redis()
     host, port, host_blob_count = next_host(redis_conn)
     factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
     try:
-        blobs_sent = push_blob(host, port, factory)
+        from twisted.internet import reactor
+        reactor.connectTCP(host, port, factory)
+        reactor.run()
+        blobs_sent = factory.p.blob_hashes_sent
         if blobs_sent[0] == blob_hash:
             redis_conn.sadd(host, blob_hash)
             redis_conn.sadd("cluster_blobs", blob_hash)
             os.remove(blob_path)
             log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
                      host_blob_count)
-        return
+        return sys.exit(0)
     except JobTimeoutException:
-        log.info("Failed to forward %s --> %s", blob_hash[:8], host)
+        log.error("Failed to forward %s --> %s", blob_hash[:8], host)
+        return sys.exit(1)
 
 
 @retry_redis
 def enqueue_blob(blob_hash, client_factory_class):
     redis_conn = Redis()
     q = Queue(connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
+    try:
+        q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
+    except:
+        log.exception("enqueued process failed")
+        raise
 
 
 class ReflectorServerProtocol(Protocol):

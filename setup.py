@@ -9,7 +9,7 @@ requires = [
 ]
 console_scripts = [
     'prism-server = prism.server:main',
-    'prism-worker = prism.worker:main'
+    'prism-supervisor = prism.supervisor:main'
 ]
 package_name = "prism"
 base_dir = os.path.abspath(os.path.dirname(__file__))
