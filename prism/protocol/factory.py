@@ -3,6 +3,7 @@ import os
 from twisted.internet import defer, reactor
 from twisted.internet.protocol import ServerFactory, ClientFactory
 
+from prism.protocol.blob import is_valid_blobhash
 from prism.protocol.server import ReflectorServerProtocol, enqueue_blob
 from prism.protocol.client import BlobReflectorClient
 from prism.config import get_settings
@@ -42,7 +43,8 @@ class PrismServerFactory(ServerFactory):
             log.warning("%i blobs need to be sent from previous run", len(blobs))
             log.warning("queueing %i of them to be sent", len(blobs))
             for i, blob_hash in enumerate(blobs):
-                reactor.callLater(int(i/25), enqueue_blob, blob_hash, self.client_factory)
+                if is_valid_blobhash(blob_hash):
+                    reactor.callLater(int(i/25), enqueue_blob, blob_hash, self.client_factory)
             log.info("queued blobs, starting server")
 
 
