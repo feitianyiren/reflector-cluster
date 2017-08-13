@@ -91,7 +91,7 @@ def process_blob(blob_hash, client_factory_class):
 def enqueue_blob(blob_hash, client_factory_class):
     redis_conn = Redis()
     q = Queue(connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=30)
+    q.enqueue(process_blob, blob_hash, client_factory_class)
 
 
 class ReflectorServerProtocol(Protocol):
