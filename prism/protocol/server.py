@@ -77,7 +77,8 @@ def process_blob(blob_hash, client_factory_class):
         if blobs_sent[0] == blob_hash:
             redis_conn.sadd(host, blob_hash)
             redis_conn.sadd("cluster_blobs", blob_hash)
-            os.remove(blob_path)
+            if os.path.isfile(blob_path):
+                os.remove(blob_path)
             log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
                      host_blob_count)
         return sys.exit(0)
