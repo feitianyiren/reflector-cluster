@@ -243,11 +243,10 @@ class BlobFile(HashBlob):
 
     def open_for_writing(self, peer):
         if peer not in self.writers:
-            log.debug("Opening %s to be written by %s", str(self), str(peer))
-            write_file = tempfile.NamedTemporaryFile(delete=False, dir=self.blob_dir)
+            log.info("Opening %s to be written by %s", str(self), str(peer))
+            write_file = tempfile.NamedTemporaryFile(delete=True, dir=self.blob_dir)
             finished_deferred = defer.Deferred()
             writer = HashBlobWriter(write_file, self.get_length, self.writer_finished)
-
             self.writers[peer] = (writer, finished_deferred)
             return finished_deferred, writer.write, writer.cancel
         log.warning("Tried to download the same file twice simultaneously from the same peer")
@@ -301,7 +300,6 @@ class BlobFile(HashBlob):
             writer.write_handle = None
 
     def _save_verified_blob(self, writer):
-
         def move_file():
             with self.setting_verified_blob_lock:
                 if self.moved_verified_blob is False:
