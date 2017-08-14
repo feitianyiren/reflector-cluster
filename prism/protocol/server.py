@@ -143,7 +143,7 @@ class ReflectorServerProtocol(Protocol):
             yield self.blob_storage.load_sd_blob(blob)
         yield self.close_blob()
         yield self.send_response({response_key: True})
-        log.info("Received %s", blob)
+        log.info("Received %s from %s", blob, self.peer.host)
         enqueue_blob(blob_hash, self.client_factory)
 
     @defer.inlineCallbacks
