@@ -1,16 +1,13 @@
-import os
-import tempfile
-import threading
-import shutil
 import logging
-
+import os
+import threading
+from io import BytesIO
+from twisted.web.client import FileBodyProducer
 from twisted.internet import interfaces, defer, threads
 from twisted.protocols.basic import FileSender
 from twisted.python.failure import Failure
-
 from zope.interface import implements
 from Crypto.Hash import SHA384
-
 from prism.constants import BLOB_HASH_LENGTH, BLOB_SIZE
 from prism.error import InvalidDataError, DownloadCanceledError
 
@@ -232,6 +229,7 @@ class BlobFile(HashBlob):
         self.file_path = os.path.join(blob_dir, self.blob_hash)
         self.setting_verified_blob_lock = threading.Lock()
         self.moved_verified_blob = False
+        self.buffer = BytesIO()
         if os.path.isfile(self.file_path):
             self.set_length(os.path.getsize(self.file_path))
             # This assumes that the hash of the blob has already been
@@ -242,12 +240,10 @@ class BlobFile(HashBlob):
             self._verified = True
 
     def open_for_writing(self, peer):
-        if peer not in self.writers:
+        if not peer in self.writers:
             log.debug("Opening %s to be written by %s", str(self), str(peer))
-            write_file = tempfile.NamedTemporaryFile(delete=False, dir=self.blob_dir)
             finished_deferred = defer.Deferred()
-            writer = HashBlobWriter(write_file, self.get_length, self.writer_finished)
-
+            writer = HashBlobWriter(self.buffer, self.get_length, self.writer_finished)
             self.writers[peer] = (writer, finished_deferred)
             return finished_deferred, writer.write, writer.cancel
         log.warning("Tried to download the same file twice simultaneously from the same peer")
@@ -295,23 +291,18 @@ class BlobFile(HashBlob):
     def _close_writer(self, writer):
         if writer.write_handle is not None:
             log.debug("Closing %s", str(self))
-            name = writer.write_handle.name
             writer.write_handle.close()
-            threads.deferToThread(os.remove, name)
             writer.write_handle = None
 
+    @defer.inlineCallbacks
     def _save_verified_blob(self, writer):
-
-        def move_file():
-            with self.setting_verified_blob_lock:
-                if self.moved_verified_blob is False:
-                    temp_file_name = writer.write_handle.name
-                    writer.write_handle.close()
-                    shutil.move(temp_file_name, self.file_path)
-                    writer.write_handle = None
-                    self.moved_verified_blob = True
-                    return True
-                else:
-                    raise DownloadCanceledError()
-
-        return threads.deferToThread(move_file)
+        with self.setting_verified_blob_lock:
+            if self.moved_verified_blob is False:
+                self.buffer.seek(0)
+                out_path = os.path.join(self.blob_dir, self.blob_hash)
+                producer = FileBodyProducer(self.buffer)
+                yield producer.startProducing(open(out_path, 'wb'))
+                self.moved_verified_blob = True
+                defer.returnValue(True)
+            else:
+                raise DownloadCanceledError()
