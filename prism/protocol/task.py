@@ -48,7 +48,7 @@ def process_blob(blob_hash, client_factory_class):
     import sys
     from rq.timeouts import JobTimeoutException
 
-    log.info("process blob pid %s", os.getpid())
+    log.debug("process blob pid %s", os.getpid())
     blob_path = os.path.join(BLOB_DIR, blob_hash)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)

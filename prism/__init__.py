@@ -1,12 +1,15 @@
 import logging
-from twisted.python import log as tx_log
+import os
+from logging.handlers import RotatingFileHandler
 from twisted.internet import selectreactor
 selectreactor.install()
 
 log = logging.getLogger()
 h = logging.StreamHandler()
-h.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s"))
+formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
+h.setFormatter(formatter)
 log.addHandler(h)
+file_h = RotatingFileHandler(os.path.expanduser("~/prism-server.log"), maxBytes=50000000)
+file_h.setFormatter(formatter)
+log.addHandler(file_h)
 log.setLevel(logging.INFO)
-observer = tx_log.PythonLoggingObserver(loggerName=__name__)
-observer.start()
