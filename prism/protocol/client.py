@@ -23,7 +23,8 @@ class BlobReflectorClient(Protocol):
         self.producer = None
         self.streaming = False
         self.sent_blobs = False
-        d = self.send_handshake()
+        d = self.blob_storage.start()
+        d.addCallback(lambda _: self.send_handshake())
         d.addErrback(lambda err: log.warning("An error occurred immediately: %s", err.getTraceback()))
 
     def dataReceived(self, data):
