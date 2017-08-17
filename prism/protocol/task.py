@@ -1,9 +1,12 @@
 import os
+import sys
 import time
 import logging
+
 from redis import Redis
 from rq import Queue
 from redis.exceptions import ConnectionError
+from rq.timeouts import JobTimeoutException
 
 from prism.storage.storage import ClusterStorage
 from prism.config import get_settings
@@ -29,7 +32,7 @@ def retry_redis(fn):
     return _wrapper
 
 
-def next_host(db):
+def next_host():
     host_info = {}
     for host in HOSTS:
         if ":" in host:
@@ -37,7 +40,7 @@ def next_host(db):
             port = int(port)
         else:
             address, port = host, 5566
-        count = db.scard(address)
+        count = redis_conn.scard(address)
         host_info["%s:%i" % (address, port)] = count
     for host, blob_count in sorted(host_info.iteritems(), key=lambda x: x[1]):
         address, port = host.split(":")
@@ -45,16 +48,12 @@ def next_host(db):
 
 
 def process_blob(blob_hash, client_factory_class):
-    import sys
-    from rq.timeouts import JobTimeoutException
-
     log.debug("process blob pid %s", os.getpid())
     blob_path = os.path.join(BLOB_DIR, blob_hash)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
         return sys.exit(0)
-    redis_conn = Redis()
-    host, port, host_blob_count = next_host(redis_conn)
+    host, port, host_blob_count = next_host()
     factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
     try:
         from twisted.internet import reactor
