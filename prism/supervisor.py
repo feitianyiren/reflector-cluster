@@ -1,5 +1,6 @@
 import sys
 import click
+import psutil
 from redis import Redis, ConnectionError
 from rq import Connection
 from rq.cli.cli import main as cli_main, show_queues, show_workers, refresh
@@ -10,6 +11,7 @@ settings = get_settings()
 HOSTS = settings['hosts']
 
 redis_conn = Redis()
+server_proc = [proc for proc in psutil.process_iter() if proc.name() == "prism-server"][0]
 
 
 def show_cluster_info():
@@ -29,6 +31,12 @@ def show_prism_info(queues, raw, by_queue, queue_class, worker_class):
         click.echo('')
     show_workers(queues, raw, by_queue, queue_class, worker_class)
     show_cluster_info()
+    click.echo('')
+    click.echo("Redis clients: %i" % len(redis_conn.client_list()))
+    try:
+        click.echo("Open files: %i" % len(server_proc.open_files()))
+    except psutil.NoSuchProcess:
+        sys.exit(0)
     if not raw:
         click.echo('')
         import datetime
@@ -46,7 +54,7 @@ def main(cli_config, raw, by_queue, queues, **options):
 
     try:
         with Connection(cli_config.connection):
-            refresh(0.1, show_prism_info, queues, raw, by_queue,
+            refresh(0.05, show_prism_info, queues, raw, by_queue,
                     cli_config.queue_class, cli_config.worker_class)
     except ConnectionError as e:
         click.echo(e)
