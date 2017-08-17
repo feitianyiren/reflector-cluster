@@ -1,13 +1,12 @@
 import os
 import json
 import logging
-
+from redis import Redis
 from prism.config import get_settings
 from prism.constants import BLOB_HASH_LENGTH
 from prism.error import InvalidBlobHashError
 from prism.protocol.blob import BlobFile
-from prism.storage import txredisapi as redis
-from twisted.internet import defer, reactor
+from twisted.internet import defer, threads
 
 log = logging.getLogger(__name__)
 
@@ -22,24 +21,38 @@ CLUSTER_NODE_ADDRESSES = conf['hosts']
 MAX_BLOBS_PER_HOST = conf['max blobs']
 
 
+class RedisHelper(object):
+    def __init__(self):
+        self.db = Redis()
+
+    def hget(self, name, key):
+        return threads.deferToThread(self.db.hget, name, key)
+
+    def hset(self, name, key, value):
+        return threads.deferToThread(self.db.hset, name, key, value)
+
+    def hdel(self, name, *keys):
+        return threads.deferToThread(self.db.hdel, name, *keys)
+
+    def hexists(self, name, key):
+        return threads.deferToThread(self.db.hexists, name, key)
+
+    def sismember(self, name, value):
+        return threads.deferToThread(self.db.sismember, name, value)
+
+    def smembers(self, name):
+        return threads.deferToThread(self.db.smembers, name)
+
+    def sadd(self, name, *values):
+        return threads.deferToThread(self.db.sadd, name, *values)
+
+
 class ClusterStorage(object):
     def __init__(self, path=None):
-        self.db = None
+        self.db = RedisHelper()
         self.db_dir = path or os.path.expandvars(conf['blob directory'])
         if not os.path.isdir(self.db_dir):
             raise OSError("blob storage directory \"%s\" does not exist" % self.db_dir)
-        reactor.addSystemEventTrigger("after", "startup", self.start)
-
-    @defer.inlineCallbacks
-    def start(self):
-        if self.db is None:
-            self.db = yield redis.ConnectionPool()
-            reactor.addSystemEventTrigger("before", "shutdown", self.stop)
-
-    @defer.inlineCallbacks
-    def stop(self):
-        if self.db:
-            yield self.db.disconnect()
 
     @defer.inlineCallbacks
     def blob_exists(self, blob_hash):
@@ -102,10 +115,11 @@ class ClusterStorage(object):
         with sd_blob.open_for_reading() as sd_file:
             sd_blob_data = sd_file.read()
         decoded_sd_blob = json.loads(sd_blob_data)
+        blob_hashes = []
         for blob in decoded_sd_blob['blobs']:
             if 'blob_hash' in blob and 'length' in blob:
-                blob_hash, blob_len = blob['blob_hash'], blob['length']
-                yield self.db.sadd(sd_blob.blob_hash, blob_hash)
+                blob_hashes.append(blob['blob_hash'])
+        yield self.db.sadd(sd_blob.blob_hash, *tuple(blob_hashes))
         defer.returnValue(decoded_sd_blob)
 
     @defer.inlineCallbacks
