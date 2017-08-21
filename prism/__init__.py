@@ -13,3 +13,5 @@ file_h = RotatingFileHandler(os.path.expanduser("~/prism-server.log"))
 file_h.setFormatter(formatter)
 log.addHandler(file_h)
 log.setLevel(logging.INFO)
+
+__version__ = "0.0.1"

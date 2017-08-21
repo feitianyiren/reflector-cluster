@@ -1,16 +1,17 @@
 import sys
 import click
 import psutil
-from redis import Redis, ConnectionError
+from redis import Redis
+from redis.exceptions import ConnectionError
 from rq import Connection
-from rq.cli.cli import main as cli_main, show_queues, show_workers, refresh
-from rq.cli.cli import pass_cli_config
+from rq.cli.cli import main as cli_main, show_queues, show_workers, refresh, pass_cli_config
 
 from prism.config import get_settings
-settings = get_settings()
-HOSTS = settings['hosts']
 
-redis_conn = Redis()
+settings = get_settings()
+REDIS_ADDRESS = settings['redis server']
+HOSTS = settings['hosts']
+redis_conn = Redis(REDIS_ADDRESS)
 server_proc = [proc for proc in psutil.process_iter() if proc.name() == "prism-server"][0]
 
 
@@ -44,17 +45,15 @@ def show_prism_info(queues, raw, by_queue, queue_class, worker_class):
 
 
 @cli_main.command()
-@click.option('--path', '-P', default='.', help='Specify the import path.')
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def main(cli_config, raw, by_queue, queues, **options):
     """RQ command-line monitor."""
-
     try:
-        with Connection(cli_config.connection):
-            refresh(0.05, show_prism_info, queues, raw, by_queue,
+        with Connection(redis_conn):
+            refresh(0.1, show_prism_info, queues, raw, by_queue,
                     cli_config.queue_class, cli_config.worker_class)
     except ConnectionError as e:
         click.echo(e)

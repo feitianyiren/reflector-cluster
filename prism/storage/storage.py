@@ -20,10 +20,12 @@ CLUSTER_BLOBS = "cluster_blobs"
 CLUSTER_NODE_ADDRESSES = conf['hosts']
 MAX_BLOBS_PER_HOST = conf['max blobs']
 
+REDIS_ADDRESS = conf['redis server']
+
 
 class RedisHelper(object):
     def __init__(self):
-        self.db = Redis()
+        self.db = Redis(REDIS_ADDRESS)
 
     def hget(self, name, key):
         return threads.deferToThread(self.db.hget, name, key)
@@ -66,7 +68,7 @@ class ClusterStorage(object):
     def blob_has_been_forwarded_to_host(self, blob_hash):
         """True if the blob has been sent to a host"""
         if len(blob_hash) != BLOB_HASH_LENGTH:
-            raise InvalidBlobHashError()
+            raise InvalidBlobHashError(blob_hash)
         sent_to_host = yield self.db.sismember(CLUSTER_BLOBS, blob_hash)
         defer.returnValue(sent_to_host)
 
@@ -126,6 +128,8 @@ class ClusterStorage(object):
     def get_blob(self, blob_hash, length=None):
         if length is None:
             length = yield self.db.hget(BLOB_HASHES, blob_hash)
+            if length is not None:
+                length = int(length)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
 
