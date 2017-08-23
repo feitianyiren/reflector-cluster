@@ -13,12 +13,13 @@ from prism.config import get_settings
 
 settings = get_settings()
 BLOB_DIR = os.path.expandvars(settings['blob directory'])
+REDIS_ADDRESS = settings['redis server']
 SETTINGS = get_settings()
 HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
-redis_conn = Redis()
+redis_conn = Redis(REDIS_ADDRESS)
 
 
 def retry_redis(fn):

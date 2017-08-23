@@ -16,6 +16,7 @@ def get_settings():
     BLOB_DIR = "blob directory"
     LISTEN_ON = "listen"
     WORKERS = "workers"
+    REDIS_SERVER = "redis server"
 
     settings_types = {
         LISTEN_ON: str,
@@ -23,6 +24,7 @@ def get_settings():
         MAX_BLOBS_PER_HOST: int,
         BLOB_DIR: str,
         WORKERS: int,
+        REDIS_SERVER: str,
     }
 
     default_conf = {
@@ -33,6 +35,7 @@ def get_settings():
         MAX_BLOBS_PER_HOST: 50000,
         BLOB_DIR: os.path.expanduser("~/.prism"),
         WORKERS: 4,
+        REDIS_SERVER: "localhost",
     }
 
     settings = {}
