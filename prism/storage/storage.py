@@ -13,8 +13,11 @@ log = logging.getLogger(__name__)
 conf = get_settings()
 
 # table names
-BLOB_HASHES = "blob_hashes"
-CLUSTER_BLOBS = "cluster_blobs"
+BLOB_HASHES = "blob_hashes" # contains all blob hashes (including SD blob hashes), value is length
+CLUSTER_BLOBS = "cluster_blobs" # contains blob hases that have been sent to a reflector node
+SD_BLOB_HASHES = 'sd_blob_hashes' # contain all SD blob hashes
+
+
 
 # set of node addresses
 CLUSTER_NODE_ADDRESSES = conf['hosts']
@@ -48,6 +51,8 @@ class RedisHelper(object):
     def sadd(self, name, *values):
         return threads.deferToThread(self.db.sadd, name, *values)
 
+    def sdiff(self, name, *values):
+        return threads.deferToThread(self.db.sdiff, name, *values)
 
 class ClusterStorage(object):
     def __init__(self, path=None):
@@ -78,9 +83,25 @@ class ClusterStorage(object):
         out = yield self.db.sadd(CLUSTER_BLOBS, blob_hash)
 
     @defer.inlineCallbacks
+    def get_blobs_for_stream(self, sd_hash):
+        """
+        Return a list of blobs that belong to stream with sd_hash
+        raise Exception if the sd_hash is unknown
+        """
+        blobs_in_stream = yield self.db.smembers(sd_hash)
+        if blobs_in_stream is None:
+            raise Exception('unknown sd_hash:%s',sd_hash)
+        out = []
+        for b in blobs_in_stream:
+            blob = yield self.get_blob(b)
+            out.append(blob)
+        defer.returnValue(out)
+
+    @defer.inlineCallbacks
     def get_needed_blobs_for_stream(self, sd_hash):
         """
-        Return a list of known_needed_blobs
+        Return a list of blob hashes in a stream
+        that we do not have
         """
 
         blobs_in_stream = yield self.db.smembers(sd_hash)
@@ -128,7 +149,14 @@ class ClusterStorage(object):
                 blob_hashes.append(blob['blob_hash'])
         if blob_hashes:
             yield self.db.sadd(sd_blob.blob_hash, *tuple(blob_hashes))
+            yield self.db.sadd(SD_BLOB_HASHES, sd_blob.blob_hash)
         defer.returnValue(decoded_sd_blob)
+
+    @defer.inlineCallbacks
+    def get_all_unforwarded_sd_blobs(self):
+        # returns a set of sd_blob hashes that have not been sent to a host
+        out = yield self.db.sdiff(SD_BLOB_HASHES, CLUSTER_BLOBS)
+        defer.returnValue(out)
 
     @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):
