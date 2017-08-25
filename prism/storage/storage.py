@@ -121,7 +121,8 @@ class ClusterStorage(object):
         for blob in decoded_sd_blob['blobs']:
             if 'blob_hash' in blob and 'length' in blob:
                 blob_hashes.append(blob['blob_hash'])
-        yield self.db.sadd(sd_blob.blob_hash, *tuple(blob_hashes))
+        if blob_hashes:
+            yield self.db.sadd(sd_blob.blob_hash, *tuple(blob_hashes))
         defer.returnValue(decoded_sd_blob)
 
     @defer.inlineCallbacks
