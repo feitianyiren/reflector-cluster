@@ -4,8 +4,10 @@
 
 ### How to use it
 
-While running `redis-server` and `rq-worker`, start the cluster entry point 
-server with `prism-server` and run the worker with `prism-worker`.
+While running `redis-server` (locally by default, remote is configurable), start the cluster entry point 
+server with `prism-server` and start a worker with `prism-worker`. To add more workers run more `prism-worker` processes.
+
+To monitor the server status, run `prism-supervisor` while `prism-server` is running.
 
 ### Configuration
 
