@@ -74,6 +74,7 @@ class BlobReflectorClient(Protocol):
 
     def response_failure_handler(self, err):
         log.warning("An error occurred handling the response: %s", err.getTraceback())
+        return self.disconnect(err)
 
     def handle_response(self, response_dict):
         if self.received_handshake_response is False:
@@ -89,12 +90,13 @@ class BlobReflectorClient(Protocol):
         self.file_sender = None
         return defer.succeed(None)
 
+    @defer.inlineCallbacks
     def start_transfer(self):
-        self.sent_blobs = True
         if self.read_handle is None:
             raise Exception("self.read_handle was None when trying to start the transfer")
-        d = self.file_sender.beginFileTransfer(self.read_handle, self)
-        return d
+        yield self.file_sender.beginFileTransfer(self.read_handle, self)
+        self.sent_blobs = True
+        self.blob_hashes_sent.append(self.next_blob_to_send.blob_hash)
 
     def handle_handshake_response(self, response_dict):
         if 'version' not in response_dict:
@@ -135,7 +137,6 @@ class BlobReflectorClient(Protocol):
     def send_blob_info(self):
         log.debug("Send blob info for %s", self.next_blob_to_send.blob_hash)
         assert self.next_blob_to_send is not None, "need to have a next blob to send at this point"
-        log.debug('sending blob info')
         self.write(json.dumps({
             'blob_hash': self.next_blob_to_send.blob_hash,
             'blob_size': self.next_blob_to_send.length
@@ -144,26 +145,24 @@ class BlobReflectorClient(Protocol):
     def disconnect(self, err):
         self.transport.loseConnection()
 
-    def record_success(self, result):
-        self.blob_hashes_sent.append(self.next_blob_to_send.blob_hash)
-        return result
-
+    @defer.inlineCallbacks
     def send_next_request(self):
         if self.file_sender is not None:
             # send the blob
             log.debug('Sending the blob')
-            return self.start_transfer()
+            yield self.start_transfer()
         elif self.blob_hashes_to_send:
             # open the next blob to send
             blob_hash = self.blob_hashes_to_send[0]
             log.debug('No current blob, sending the next one: %s', blob_hash)
             self.blob_hashes_to_send = self.blob_hashes_to_send[1:]
-            d = self.blob_storage.get_blob(blob_hash)
-            d.addCallback(self.open_blob_for_reading)
-            # send the server the next blob hash + length
-            d.addCallback(self.record_success)
-            d.addCallbacks(lambda _: self.send_blob_info())
-            return d
+            blob = yield self.blob_storage.get_blob(blob_hash)
+            try:
+                self.open_blob_for_reading(blob)
+                # send the server the next blob hash + length
+                self.send_blob_info()
+            except ValueError:
+                yield self.send_next_request()
         else:
             # close connection
             log.debug('No more blob hashes, closing connection')
