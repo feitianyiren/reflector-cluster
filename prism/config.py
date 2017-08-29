@@ -20,7 +20,7 @@ def get_settings():
 
     settings_types = {
         LISTEN_ON: str,
-        HOSTS: dict,
+        HOSTS: list,
         MAX_BLOBS_PER_HOST: int,
         BLOB_DIR: str,
         WORKERS: int,
@@ -29,12 +29,10 @@ def get_settings():
 
     default_conf = {
         LISTEN_ON: "localhost",
-        HOSTS: {
-            1: "jack.lbry.tech",
-        },
-        MAX_BLOBS_PER_HOST: 50000,
+        HOSTS: [
+            "jack.lbry.tech",
+        ],
         BLOB_DIR: os.path.expanduser("~/.prism"),
-        WORKERS: 4,
         REDIS_SERVER: "localhost",
     }
 
@@ -42,10 +40,7 @@ def get_settings():
 
     for k in default_conf:
         if k in conf_file_data:
-            if isinstance(settings_types[k], dict) and isinstance(conf_file_data[k], list):
-                settings[k] = {i + 1: conf_file_data[k][i] for i in range(len(conf_file_data[k]))}
-            else:
-                settings[k] = conf_file_data[k]
+            settings[k] = conf_file_data[k]
         else:
             settings[k] = default_conf[k]
     return settings
