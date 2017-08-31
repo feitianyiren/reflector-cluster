@@ -1,3 +1,4 @@
+redis server: localhost
 blob directory: $HOME/.prism
 
 listen: 127.0.0.1
