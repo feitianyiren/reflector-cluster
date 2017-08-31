@@ -39,7 +39,7 @@ class PrismServerFactory(ServerFactory):
             log.warning("%i blobs need to be sent from previous run", len(blobs))
             log.warning("queueing %i of them to be sent", len(blobs))
             for i, blob_hash in enumerate(blobs):
-                enqueue_blob(blob_hash, self.client_factory)
+                enqueue_blob(blob_hash, self.storage, self.client_factory)
             log.info("queued blobs, starting server")
 
 

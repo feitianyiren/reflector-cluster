@@ -77,7 +77,7 @@ class ReflectorServerProtocol(Protocol):
         yield self.close_blob()
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
-        enqueue_blob(blob_hash, self.client_factory)
+        enqueue_blob(blob_hash, self.blob_storage, self.client_factory)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):

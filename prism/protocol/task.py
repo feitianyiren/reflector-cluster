@@ -48,14 +48,14 @@ def next_host():
         return address, int(port), blob_count
 
 
-def process_blob(blob_hash, client_factory_class):
+def process_blob(blob_hash, blob_storage, client_factory_class):
     log.debug("process blob pid %s", os.getpid())
-    blob_path = os.path.join(BLOB_DIR, blob_hash)
+    blob_path = os.path.join(blob_storage.db_dir, blob_hash)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
         return sys.exit(0)
     host, port, host_blob_count = next_host()
-    factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
+    factory = client_factory_class(blob_storage, [blob_hash])
     try:
         from twisted.internet import reactor
         reactor.connectTCP(host, port, factory)
@@ -78,6 +78,6 @@ def process_blob(blob_hash, client_factory_class):
 
 
 @retry_redis
-def enqueue_blob(blob_hash, client_factory_class):
+def enqueue_blob(blob_hash, blob_storage, client_factory_class):
     q = Queue(connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=60)
+    q.enqueue(process_blob, blob_hash, blob_storage, client_factory_class, timeout=60)
