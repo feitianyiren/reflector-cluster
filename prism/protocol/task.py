@@ -48,9 +48,13 @@ def next_host():
         return address, int(port), blob_count
 
 
+def get_blob_path(blob_hash, blob_storage):
+    return os.path.join(blob_storage.db_dir, blob_hash)
+
+
 def process_blob(blob_hash, blob_storage, client_factory_class):
     log.debug("process blob pid %s", os.getpid())
-    blob_path = os.path.join(blob_storage.db_dir, blob_hash)
+    blob_path = get_blob_path(blob_hash, blob_storage)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
         return sys.exit(0)
