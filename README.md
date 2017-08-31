@@ -6,7 +6,7 @@ If a remote redis-server is not configured (see below), it also must be installe
 
 ### Configuration
 
-Prism can be configured using a config file located at `/.prism.yml`, click [here](https://github.com/lbryio/reflector-cluster/blob/master/prism.yml) for an example.
+Prism can be configured using a config file located at `~/.prism.yml`, click [here](https://github.com/lbryio/reflector-cluster/blob/master/prism.yml) for an example.
 
 `prism-server` requires port 5566 (TCP, the default reflector port) to be open. If a remote redis server is used the 
 server must be able to access it - only the prism server needs access to redis, the cluster hosts don't. 
