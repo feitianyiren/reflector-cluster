@@ -62,14 +62,13 @@ def update_sent_blob(blob_hash, host, blob_storage):
         log.debug('removing %s', blob_path)
         os.remove(blob_path)
 
-def process_blob(blob_hash, blob_storage, client_factory_class, host_getter=next_host):
-
+def process_blob(blob_hash, blob_storage, client_factory_class, host_infos):
+    host, port, host_blob_count = host_infos
     log.debug("process blob pid %s", os.getpid())
     blob_path = get_blob_path(blob_hash, blob_storage)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
         return sys.exit(0)
-    host, port, host_blob_count = host_getter()
     factory = client_factory_class(blob_storage, [blob_hash])
 
     from twisted.internet import reactor
@@ -96,6 +95,7 @@ def process_blob(blob_hash, blob_storage, client_factory_class, host_getter=next
 
 
 @retry_redis
-def enqueue_blob(blob_hash, blob_storage, client_factory_class):
+def enqueue_blob(blob_hash, blob_storage, client_factory_class, host_getter=next_host):
     q = Queue(connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, blob_storage, client_factory_class, timeout=60)
+    host_infos = host_getter()
+    q.enqueue(process_blob, blob_hash, blob_storage, client_factory_class, host_infos, timeout=60)
