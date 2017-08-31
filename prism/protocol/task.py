@@ -52,13 +52,13 @@ def get_blob_path(blob_hash, blob_storage):
     return os.path.join(blob_storage.db_dir, blob_hash)
 
 
-def process_blob(blob_hash, blob_storage, client_factory_class):
+def process_blob(blob_hash, blob_storage, client_factory_class, host_getter=next_host):
     log.debug("process blob pid %s", os.getpid())
     blob_path = get_blob_path(blob_hash, blob_storage)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
         return sys.exit(0)
-    host, port, host_blob_count = next_host()
+    host, port, host_blob_count = host_getter()
     factory = client_factory_class(blob_storage, [blob_hash])
     try:
         from twisted.internet import reactor
