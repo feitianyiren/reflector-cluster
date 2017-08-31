@@ -21,8 +21,14 @@ HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
-redis_conn = Redis(REDIS_ADDRESS)
 
+
+def get_redis(redis_address):
+    if redis_address == 'fake':
+        import fakeredis
+        return fakeredis.FakeRedis()
+    else:
+        return Redis(redis_address)
 
 def retry_redis(fn):
     def _wrapper(*a, **kw):
@@ -35,7 +41,7 @@ def retry_redis(fn):
     return _wrapper
 
 
-def next_host():
+def next_host(redis_conn):
     host_info = {}
     for host in HOSTS:
         if ":" in host:
@@ -62,9 +68,13 @@ def update_sent_blob(blob_hash, host, blob_storage):
         log.debug('removing %s', blob_path)
         os.remove(blob_path)
 
-def process_blob(blob_hash, blob_storage, client_factory_class, host_infos):
+def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos):
     host, port, host_blob_count = host_infos
     log.debug("process blob pid %s", os.getpid())
+
+    blob_storage = ClusterStorage(db_dir)
+    blob_storage.db.db = get_redis(redis_address)
+
     blob_path = get_blob_path(blob_hash, blob_storage)
     if not os.path.isfile(blob_path):
         log.warning("%s does not exist", blob_path)
@@ -93,9 +103,11 @@ def process_blob(blob_hash, blob_storage, client_factory_class, host_infos):
         log.exception("Job (pid %s) encountered unexpected error")
         return sys.exit(1)
 
-
 @retry_redis
-def enqueue_blob(blob_hash, blob_storage, client_factory_class, host_getter=next_host):
-    q = Queue(connection=redis_conn)
-    host_infos = host_getter()
-    q.enqueue(process_blob, blob_hash, blob_storage, client_factory_class, host_infos, timeout=60)
+def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'], host_getter=next_host):
+
+    redis_connection = get_redis(redis_address)
+    q = Queue(connection=redis_connection)
+    host_infos = host_getter(redis_connection)
+
+    q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)
