@@ -8,8 +8,6 @@ from prism.config import get_settings
 
 log = logging.getLogger(__name__)
 settings = get_settings()
-BLOB_DIR = os.path.expandvars(settings['blob directory'])
-
 
 class PrismServerFactory(ServerFactory):
     """
@@ -34,7 +32,7 @@ class PrismServerFactory(ServerFactory):
         return p
 
     def startFactory(self):
-        blobs = os.listdir(BLOB_DIR)
+        blobs = os.listdir(self.storage.db_dir)
         if blobs:
             log.warning("%i blobs need to be sent from previous run", len(blobs))
             log.warning("queueing %i of them to be sent", len(blobs))
