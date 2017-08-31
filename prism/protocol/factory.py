@@ -1,6 +1,7 @@
 import logging
 import os
 from twisted.internet.protocol import ServerFactory, ClientFactory
+from twisted.internet import defer
 
 from prism.protocol.server import ReflectorServerProtocol, enqueue_blob
 from prism.protocol.client import BlobReflectorClient
@@ -50,6 +51,10 @@ class PrismClientFactory(ClientFactory):
         self.protocol_version = 1
         self.sent_blobs = False
         self.p = None
+        #this deferred is fired when this protocol is disconnected
+        #(when connectionLost() is called)
+        self.on_connection_lost_d = defer.Deferred()
+
 
     def buildProtocol(self, addr):
         p = self.protocol()

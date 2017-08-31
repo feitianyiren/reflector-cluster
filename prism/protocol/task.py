@@ -8,6 +8,8 @@ from rq import Queue
 from redis.exceptions import ConnectionError
 from rq.timeouts import JobTimeoutException
 
+from twisted.internet import defer
+
 from prism.storage.storage import ClusterStorage
 from prism.config import get_settings
 
@@ -51,8 +53,17 @@ def next_host():
 def get_blob_path(blob_hash, blob_storage):
     return os.path.join(blob_storage.db_dir, blob_hash)
 
+@defer.inlineCallbacks
+def update_sent_blob(blob_hash, host, blob_storage):
+    log.info("updating sent blob %s", blob_hash)
+    res = yield blob_storage.add_blob_to_host(blob_hash, host)
+    blob_path = get_blob_path(blob_hash, blob_storage)
+    if os.path.isfile(blob_path):
+        log.debug('removing %s', blob_path)
+        os.remove(blob_path)
 
 def process_blob(blob_hash, blob_storage, client_factory_class, host_getter=next_host):
+
     log.debug("process blob pid %s", os.getpid())
     blob_path = get_blob_path(blob_hash, blob_storage)
     if not os.path.isfile(blob_path):
@@ -60,18 +71,21 @@ def process_blob(blob_hash, blob_storage, client_factory_class, host_getter=next
         return sys.exit(0)
     host, port, host_blob_count = host_getter()
     factory = client_factory_class(blob_storage, [blob_hash])
-    try:
-        from twisted.internet import reactor
-        reactor.connectTCP(host, port, factory)
-        reactor.run()
+
+    from twisted.internet import reactor
+    @defer.inlineCallbacks
+    def on_finish(result):
         blobs_sent = factory.p.blob_hashes_sent
-        if blobs_sent[0] == blob_hash:
-            redis_conn.sadd(host, blob_hash)
-            redis_conn.sadd("cluster_blobs", blob_hash)
-            if os.path.isfile(blob_path):
-                os.remove(blob_path)
+        if blobs_sent and blobs_sent[0] == blob_hash:
             log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
                      host_blob_count)
+            yield update_sent_blob(blob_hash, host, blob_storage)
+        reactor.fireSystemEvent("shutdown")
+
+    factory.on_connection_lost_d.addCallback(on_finish)
+    try:
+        reactor.connectTCP(host, port, factory)
+        reactor.run()
         return sys.exit(0)
     except JobTimeoutException:
         log.error("Failed to forward %s --> %s", blob_hash[:8], host)

@@ -73,6 +73,11 @@ class ClusterStorage(object):
         defer.returnValue(sent_to_host)
 
     @defer.inlineCallbacks
+    def add_blob_to_host(self, blob_hash, host):
+        out = yield self.db.sadd(host, blob_hash)
+        out = yield self.db.sadd(CLUSTER_BLOBS, blob_hash)
+
+    @defer.inlineCallbacks
     def get_needed_blobs_for_stream(self, sd_hash):
         """
         Return a list of known_needed_blobs
