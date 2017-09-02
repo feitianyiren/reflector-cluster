@@ -22,4 +22,6 @@ install:
 
 script:
   - PYTHONPATH=. trial tests
-  - python -m unittest discover tests/functional
+  # we have to run these seperately because reactor cannot be restarted
+  - python -m unittest discover -s tests/functional/ -p test_blob_task.py
+  - python -m unittest discover -s tests/functional/ -p test_stream_task.py
