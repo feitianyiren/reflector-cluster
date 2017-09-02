@@ -75,8 +75,6 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
     blob_storage = ClusterStorage(db_dir)
     blob_storage.db.db = get_redis(redis_address)
 
-    factory = client_factory_class(blob_storage, [blob_hash])
-
     from twisted.internet import reactor
     def _process_blob(factory):
         @defer.inlineCallbacks
@@ -102,7 +100,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
         d = setup_d()
     else:
         d = defer.succeed(True)
-    d.addCallback(lambda _: client_factory_class(blob_storage,[blob_hash]))
+    d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
     d.addCallback(lambda factory: _process_blob(factory))
     reactor.run()
     return sys.exit(0)
