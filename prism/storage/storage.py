@@ -25,38 +25,50 @@ MAX_BLOBS_PER_HOST = conf['max blobs']
 
 REDIS_ADDRESS = conf['redis server']
 
+def get_redis_connection(address):
+    if address == 'fake':
+        # use fakeredis for testing only
+        import fakeredis
+        return fakeredis.FakeRedis()
+    else:
+        return Redis(address)
 
 class RedisHelper(object):
-    def __init__(self):
-        self.db = Redis(REDIS_ADDRESS)
+    def __init__(self, redis_address):
+        self.db = get_redis_connection(redis_address)
+        if redis_address == 'fake':
+            # fakeredis is not thread safe
+            self.defer_func = defer.execute
+        else:
+            self.defer_func = threads.deferToThread
 
     def hget(self, name, key):
-        return threads.deferToThread(self.db.hget, name, key)
+        return self.defer_func(self.db.hget, name, key)
 
     def hset(self, name, key, value):
-        return threads.deferToThread(self.db.hset, name, key, value)
+        return self.defer_func(self.db.hset, name, key, value)
 
     def hdel(self, name, *keys):
-        return threads.deferToThread(self.db.hdel, name, *keys)
+        return self.defer_func(self.db.hdel, name, *keys)
 
     def hexists(self, name, key):
-        return threads.deferToThread(self.db.hexists, name, key)
+        return self.defer_func(self.db.hexists, name, key)
 
     def sismember(self, name, value):
-        return threads.deferToThread(self.db.sismember, name, value)
+        return self.defer_func(self.db.sismember, name, value)
 
     def smembers(self, name):
-        return threads.deferToThread(self.db.smembers, name)
+        return self.defer_func(self.db.smembers, name)
 
     def sadd(self, name, *values):
-        return threads.deferToThread(self.db.sadd, name, *values)
+        return self.defer_func(self.db.sadd, name, *values)
 
     def sdiff(self, name, *values):
-        return threads.deferToThread(self.db.sdiff, name, *values)
+        return self.defer_func(self.db.sdiff, name, *values)
 
 class ClusterStorage(object):
-    def __init__(self, path=None):
-        self.db = RedisHelper()
+    def __init__(self, path=None, redis_address=conf['redis server']):
+        self.db = RedisHelper(redis_address)
         self.db_dir = path or os.path.expandvars(conf['blob directory'])
         if not os.path.isdir(self.db_dir):
             raise OSError("blob storage directory \"%s\" does not exist" % self.db_dir)

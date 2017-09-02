@@ -10,7 +10,7 @@ from rq.timeouts import JobTimeoutException
 
 from twisted.internet import defer, task
 
-from prism.storage.storage import ClusterStorage
+from prism.storage.storage import ClusterStorage, get_redis_connection
 from prism.config import get_settings
 
 settings = get_settings()
@@ -21,14 +21,6 @@ HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
-
-
-def get_redis(redis_address):
-    if redis_address == 'fake':
-        import fakeredis
-        return fakeredis.FakeRedis()
-    else:
-        return Redis(redis_address)
 
 def retry_redis(fn):
     def _wrapper(*a, **kw):
@@ -72,8 +64,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
     host, port, host_blob_count = host_infos
     log.debug("process blob pid %s", os.getpid())
 
-    blob_storage = ClusterStorage(db_dir)
-    blob_storage.db.db = get_redis(redis_address)
+    blob_storage = ClusterStorage(db_dir, redis_address)
 
     from twisted.internet import reactor
     def _process_blob(factory):
@@ -109,8 +100,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
     log.info("processing stream %s",sd_hash)
     host, port, host_blob_count = host_infos
-    blob_storage = ClusterStorage(db_dir)
-    blob_storage.db.db = get_redis(redis_address)
+    blob_storage = ClusterStorage(db_dir, redis_address)
 
     from twisted.internet import reactor
     def _process_stream(factory):
@@ -145,7 +135,7 @@ def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, r
                    host_getter=next_host):
 
     timeout = (num_blobs_in_stream+1)*30
-    redis_connection = get_redis(redis_address)
+    redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
     host_infos = host_getter(redis_connection)
     q.enqueue(process_stream, sd_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=timeout)
@@ -153,7 +143,7 @@ def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, r
 @retry_redis
 def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'], host_getter=next_host):
 
-    redis_connection = get_redis(redis_address)
+    redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
     host_infos = host_getter(redis_connection)
 
