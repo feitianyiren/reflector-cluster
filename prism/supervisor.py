@@ -1,4 +1,5 @@
 import sys
+import os
 import click
 import psutil
 from redis import Redis
@@ -9,6 +10,7 @@ from rq.cli.cli import main as cli_main, show_queues, show_workers, refresh, pas
 from prism.config import get_settings
 
 settings = get_settings()
+BLOB_DIR = settings['blob directory']
 REDIS_ADDRESS = settings['redis server']
 HOSTS = settings['hosts']
 redis_conn = Redis(REDIS_ADDRESS)
@@ -34,6 +36,8 @@ def show_prism_info(queues, raw, by_queue, queue_class, worker_class):
     show_cluster_info()
     click.echo('')
     click.echo("Redis clients: %i" % len(redis_conn.client_list()))
+    click.echo("Local blobs: %i" % len(os.listdir(BLOB_DIR)))
+
     try:
         click.echo("Open files: %i" % len(server_proc.open_files()))
     except psutil.NoSuchProcess:
