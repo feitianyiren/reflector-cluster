@@ -36,7 +36,7 @@ def show_prism_info(queues, raw, by_queue, queue_class, worker_class):
     show_cluster_info()
     click.echo('')
     click.echo("Redis clients: %i" % len(redis_conn.client_list()))
-    click.echo("Local blobs: %i" % len(os.listdir(BLOB_DIR)))
+    click.echo("Local blobs: %i" % len(os.listdir(os.path.expandvars(BLOB_DIR))))
 
     try:
         click.echo("Open files: %i" % len(server_proc.open_files()))
