@@ -2,7 +2,7 @@ import json
 import os
 import random
 import logging
-from twisted.internet import defer, error
+from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
 from twisted.internet.error import ConnectionDone
@@ -13,7 +13,7 @@ from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
 from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
 from prism.error import ReflectorClientVersionError
 from prism.protocol.blob import is_valid_blobhash
-from prism.protocol.task import enqueue_blob
+from prism.protocol.task import enqueue_blob, enqueue_stream
 from prism.config import get_settings
 
 random.seed(None)
@@ -28,15 +28,24 @@ log = logging.getLogger(__name__)
 
 
 class ReflectorServerProtocol(Protocol):
+    def __init__(self, blob_storage, task_after_completed_blob=None):
+        self.blob_storage = blob_storage
+        # this is a function that is scheduled whenever we've received a blob
+        # it takes sd_hash, and blob_hash as arguments
+        self.task_after_completed_blob = task_after_completed_blob
+
+
     def connectionMade(self):
         peer_info = self.transport.getPeer()
         log.debug('Connected to %s:%i', peer_info.host, peer_info.port)
         self.protocol_version = self.factory.protocol_version
-        self.blob_storage = self.factory.storage
         self.client_factory = self.factory.client_factory
         self.peer = peer_info
         self.received_handshake = False
         self.peer_version = None
+        # If we received an sd blob, indicating that we are receiving
+        # a stream, this is its sd hash
+        self.sd_hash_receiving_stream = None
         self.receiving_blob = False
         self.incoming_blob = None
         self.blob_write = None
@@ -77,7 +86,8 @@ class ReflectorServerProtocol(Protocol):
         yield self.close_blob()
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
-        enqueue_blob(blob_hash, self.blob_storage.db_dir, self.client_factory)
+        if self.task_after_completed_blob is not None:
+            reactor.callLater(0, self.task_after_completed_blob, blob_hash, self.sd_hash_receiving_stream)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
@@ -241,6 +251,7 @@ class ReflectorServerProtocol(Protocol):
 
     @defer.inlineCallbacks
     def get_descriptor_response(self, sd_hash, sd_size):
+        self.sd_hash_receiving_stream = sd_hash
         needed = yield self.blob_storage.get_needed_blobs_for_stream(sd_hash)
 
         if needed is not None:

@@ -3,7 +3,7 @@ import logging
 from twisted.internet import reactor
 from twisted.application import service
 
-from prism.protocol.factory import PrismServerFactory
+from prism.protocol.factory import build_prism_stream_server_factory
 from prism.storage.storage import ClusterStorage
 from prism.config import get_settings
 
@@ -23,8 +23,8 @@ class PrismServer(service.Service):
     def startService(self):
         log.info("Starting prism server (pid %i), listening on %s (reactor: %s)", os.getpid(),
                  LISTEN_ON, reactor)
-        self._port = reactor.listenTCP(self.port_num, PrismServerFactory(self.cluster_storage),
-                                       50, LISTEN_ON)
+        factory = build_prism_stream_server_factory(self.cluster_storage)
+        self._port = reactor.listenTCP(self.port_num, factory, 50, LISTEN_ON)
 
     def stopService(self):
         return self._port.stopListening()
