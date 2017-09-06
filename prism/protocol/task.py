@@ -70,7 +70,16 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         connection.disconnect()
         reactor.fireSystemEvent("shutdown")
 
-    factory.on_connection_lost_d.addCallback(on_finish)
+    @defer.inlineCallbacks
+    def on_error(error):
+        log.error("Error when sending %s: %s. Hashes sent %s", hash_to_process, error,
+                                                            factory.p.blob_hashes_sent)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+
+    factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
     try:
         connection = reactor.connectTCP(host, port, factory)
     except JobTimeoutException:
