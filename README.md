@@ -1,13 +1,15 @@
 ## Requirements
 
-- prism server needs access to a redis instance
+Prism server needs access to a redis instance.
 
 
 ## Installation
 
-To install this package, run `pip install -r requirements.txt; pip install -e .`
-
-If a remote redis-server is not configured (see below), it also must be installed locally.
+```
+# clone the repo
+pip install -r requirements.txt
+pip install .
+```
 
 
 ## Configuration
@@ -15,12 +17,12 @@ If a remote redis-server is not configured (see below), it also must be installe
 ### Prism Server
 
 - Create config file at `~/.prism.yml` ([example](https://github.com/lbryio/reflector-cluster/blob/master/prism.yml)).
-- Open port 5566/tcp to the world.
-- Ensure redis is accessible by server
+- Open port `5566/tcp` to the world.
+- Ensure redis is accessible by server.
 
 ### Cluster Hosts
 
-- Open ports 3333/tcp and 4444/udp to the world. Open port 5566/tcp to the prism server.
+- Open ports `3333/tcp` and `4444/udp` to the world. Open port `5566/tcp` to the prism server.
 - Set `run_reflector_server` to `True` in lbrynet daemon config.
 
 
