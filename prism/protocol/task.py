@@ -52,83 +52,66 @@ def get_blob_path(blob_hash, blob_storage):
     return os.path.join(blob_storage.db_dir, blob_hash)
 
 @defer.inlineCallbacks
-def update_sent_blob(blob_hash, host, blob_storage):
-    log.info("updating sent blob %s", blob_hash)
-    res = yield blob_storage.add_blob_to_host(blob_hash, host)
-    blob_path = get_blob_path(blob_hash, blob_storage)
-    if os.path.isfile(blob_path):
-        log.debug('removing %s', blob_path)
-        os.remove(blob_path)
+def update_sent_blobs(blob_hashes_sent, host, blob_storage):
+    for blob_hash in blob_hashes_sent:
+        log.info("updating sent blob %s", blob_hash)
+        res = yield blob_storage.add_blob_to_host(blob_hash, host)
+        blob_path = get_blob_path(blob_hash, blob_storage)
+        if os.path.isfile(blob_path):
+            log.debug('removing %s', blob_path)
+            os.remove(blob_path)
+
+def connect_factory(host, port, factory, blob_storage, hash_to_process):
+    from twisted.internet import reactor
+    @defer.inlineCallbacks
+    def on_finish(result):
+        log.info("Finished sending %s", hash_to_process)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+    factory.on_connection_lost_d.addCallback(on_finish)
+    try:
+        connection = reactor.connectTCP(host, port, factory)
+    except JobTimeoutException:
+        log.error("Failed to forward %s --> %s", hash_to_process[:8], host)
+        return sys.exit(0)
+    except Exception as err:
+        log.exception("Job (pid %s) encountered unexpected error")
+        return sys.exit(1)
+
 
 def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
-    host, port, host_blob_count = host_infos
     log.debug("process blob pid %s", os.getpid())
+    host, port, host_blob_count = host_infos
 
     blob_storage = ClusterStorage(db_dir, redis_address)
 
     from twisted.internet import reactor
-    def _process_blob(factory):
-        @defer.inlineCallbacks
-        def on_finish(result):
-            blobs_sent = factory.p.blob_hashes_sent
-            if blobs_sent and blobs_sent[0] == blob_hash:
-                log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
-                         host_blob_count)
-                yield update_sent_blob(blob_hash, host, blob_storage)
-
-            connection.disconnect()
-            reactor.fireSystemEvent("shutdown")
-        factory.on_connection_lost_d.addCallback(on_finish)
-        try:
-            connection = reactor.connectTCP(host, port, factory)
-        except JobTimeoutException:
-            log.error("Failed to forward %s --> %s", blob_hash[:8], host)
-            return sys.exit(0)
-        except Exception as err:
-            log.exception("Job (pid %s) encountered unexpected error")
-            return sys.exit(1)
     if setup_d is not None:
         d = setup_d()
     else:
         d = defer.succeed(True)
     d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
-    d.addCallback(lambda factory: _process_blob(factory))
+    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, blob_hash))
     reactor.run()
     return sys.exit(0)
 
 
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
-    log.info("processing stream %s",sd_hash)
+    log.debug("processing stream pid %s", os.getpid())
     host, port, host_blob_count = host_infos
     blob_storage = ClusterStorage(db_dir, redis_address)
-
     from twisted.internet import reactor
-    def _process_stream(factory):
-        @defer.inlineCallbacks
-        def on_finish(result):
-            blob_hashes_sent = factory.p.blob_hashes_sent
-            for blob_hash in blob_hashes_sent:
-                yield update_sent_blob(blob_hash, host, blob_storage)
-
-            connection.disconnect()
-            reactor.fireSystemEvent("shutdown")
-        factory.on_connection_lost_d.addCallback(on_finish)
-        try:
-            connection = reactor.connectTCP(host, port, factory)
-        except JobTimeoutException:
-            log.error("Failed to forward %s --> %s", blob_hash[:8], host)
-            return sys.exit(0)
-        except Exception as err:
-            log.exception("Job (pid %s) encountered unexpected error")
-            return sys.exit(1)
     if setup_d is not None:
         d = setup_d()
     else:
         d = defer.succeed(True)
-    d.addCallback(lambda _: client_factory_class(sd_hash,blob_storage))
-    d.addCallback(lambda factory: _process_stream(factory))
+    d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage))
+    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, sd_hash))
     reactor.run()
     return sys.exit(0)
+
 
 @retry_redis
 def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, redis_address=settings['redis server'],
