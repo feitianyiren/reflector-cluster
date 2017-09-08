@@ -39,7 +39,6 @@ class ReflectorServerProtocol(Protocol):
         peer_info = self.transport.getPeer()
         log.debug('Connected to %s:%i', peer_info.host, peer_info.port)
         self.protocol_version = self.factory.protocol_version
-        self.client_factory = self.factory.client_factory
         self.peer = peer_info
         self.received_handshake = False
         self.peer_version = None

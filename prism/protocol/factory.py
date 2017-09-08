@@ -26,7 +26,6 @@ class PrismServerFactory(ServerFactory):
         self.storage = storage
         self.protocol_version = 1
         self.task_after_completed_blob = task_after_completed_blob
-        self.client_factory = PrismClientFactory
 
     def buildProtocol(self, addr):
         p = self.protocol(self.storage, self.task_after_completed_blob)
@@ -41,7 +40,7 @@ class PrismServerFactory(ServerFactory):
             log.warning("%i blobs need to be sent from previous run", len(blobs))
             log.warning("queueing %i of them to be sent", len(blobs))
             for i, blob_hash in enumerate(blobs):
-                enqueue_blob(blob_hash, self.storage, self.client_factory)
+                enqueue_blob(blob_hash, self.storage.db_dir, build_prism_blob_client_factory)
             log.info("queued blobs, starting server")
 
 class PrismClientFactory(ClientFactory):
@@ -113,7 +112,7 @@ def build_prism_stream_server_factory(blob_storage):
                 total_blobs = len(blobs)
                 enqueue_stream(sd_hash, total_blobs, blob_storage.db_dir, build_prism_stream_client_factory)
         else:
-            enqueue_blob(blob_hash, build_prism_blob_client_factory)
+            enqueue_blob(blob_hash, blob_storage.db_dir, build_prism_blob_client_factory)
 
     return PrismServerFactory(blob_storage, task_after_completed_blob)
 
