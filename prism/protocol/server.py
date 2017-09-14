@@ -6,15 +6,16 @@ from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
 from twisted.internet.error import ConnectionDone
+from lbrynet.core.utils import is_valid_blobhash
 
 from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
 from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
 from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
 from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
 from prism.error import ReflectorClientVersionError
-from prism.protocol.blob import is_valid_blobhash
 from prism.protocol.task import enqueue_blob, enqueue_stream
 from prism.config import get_settings
+
 
 random.seed(None)
 
@@ -47,9 +48,8 @@ class ReflectorServerProtocol(Protocol):
         self.sd_hash_receiving_stream = None
         self.receiving_blob = False
         self.incoming_blob = None
-        self.blob_write = None
+        self.blob_writer = None
         self.blob_finished_d = None
-        self.cancel_write = None
         self.request_buff = ""
 
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
@@ -82,7 +82,7 @@ class ReflectorServerProtocol(Protocol):
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         if response_key == RECEIVED_SD_BLOB:
             yield self.blob_storage.load_sd_blob(blob)
-        yield self.close_blob()
+        self.close_blob()
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
         if self.task_after_completed_blob is not None:
@@ -91,6 +91,7 @@ class ReflectorServerProtocol(Protocol):
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
         yield self.clean_up_failed_upload(err, self.incoming_blob)
+        self.close_blob()
         yield self.send_response({response_key: False})
 
     def handle_incoming_blob(self, response_key):
@@ -102,14 +103,14 @@ class ReflectorServerProtocol(Protocol):
         """
         blob = self.incoming_blob
 
-        self.blob_finished_d, self.blob_write, self.cancel_write = blob.open_for_writing(self.peer)
+        self.blob_writer, self.blob_finished_d  = blob.open_for_writing(self.peer)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
 
     def close_blob(self):
         self.blob_finished_d = None
-        self.blob_write = None
-        self.cancel_write = None
+        self.blob_writer.close()
+        self.blob_writer = None
         self.incoming_blob = None
         self.receiving_blob = False
 
@@ -119,7 +120,7 @@ class ReflectorServerProtocol(Protocol):
 
     def dataReceived(self, data):
         if self.receiving_blob:
-            self.blob_write(data)
+            self.blob_writer.write(data)
         else:
             log.debug('Not yet recieving blob, data needs further processing')
             self.request_buff += data
@@ -130,7 +131,7 @@ class ReflectorServerProtocol(Protocol):
                 d.addErrback(self.handle_error)
                 if self.receiving_blob and extra_data:
                     log.debug('Writing extra data to blob')
-                    self.blob_write(extra_data)
+                    self.blob_writer.write(extra_data)
 
     def _get_valid_response(self, response_msg):
         extra_data = None
@@ -240,7 +241,7 @@ class ReflectorServerProtocol(Protocol):
         sd_blob_hash = request_dict[SD_BLOB_HASH]
         sd_blob_size = request_dict[SD_BLOB_SIZE]
 
-        if self.blob_write is None:
+        if self.blob_writer is None:
             d = self.get_descriptor_response(sd_blob_hash, sd_blob_size)
             d.addCallback(self.send_response)
         else:
@@ -289,7 +290,7 @@ class ReflectorServerProtocol(Protocol):
         blob_hash = request_dict[BLOB_HASH]
         blob_size = request_dict[BLOB_SIZE]
 
-        if self.blob_write is None:
+        if self.blob_writer is None:
             log.debug('Received info for blob: %s', blob_hash[:16])
             d = self.get_blob_response(blob_hash, blob_size)
             d.addCallback(self.send_response)

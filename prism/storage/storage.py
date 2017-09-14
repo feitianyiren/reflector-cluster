@@ -2,11 +2,13 @@ import os
 import json
 import logging
 from redis import Redis
+
+from lbrynet.blob.blob_file import BlobFile
+from twisted.internet import defer, threads
+
 from prism.config import get_settings
 from prism.constants import BLOB_HASH_LENGTH
 from prism.error import InvalidBlobHashError
-from prism.protocol.blob import BlobFile
-from twisted.internet import defer, threads
 
 log = logging.getLogger(__name__)
 
