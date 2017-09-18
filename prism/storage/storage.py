@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import time
 from redis import Redis
 
 from lbrynet.blob.blob_file import BlobFile
@@ -19,7 +20,6 @@ conf = get_settings()
 BLOB_HASHES = "blob_hashes" # contains all blob hashes (including SD blob hashes), value is length
 CLUSTER_BLOBS = "cluster_blobs" # contains blob hases that have been sent to a reflector node
 SD_BLOB_HASHES = 'sd_blob_hashes' # contain all SD blob hashes
-
 
 
 # set of node addresses
@@ -73,6 +73,8 @@ class RedisHelper(object):
     def add_blob_to_host(self, blob_hash, host):
         yield self.sadd(host, blob_hash)
         yield self.sadd(CLUSTER_BLOBS, blob_hash)
+        length, timestamp, prev_host = yield self.get_blob(blob_hash)
+        yield self.set_blob(blob_hash, length, timestamp, host)
 
     @defer.inlineCallbacks
     def add_sd_blob(self, sd_blob_hash, blob_hashes):
@@ -101,16 +103,16 @@ class RedisHelper(object):
         defer.returnValue(blobs_in_stream)
 
     @defer.inlineCallbacks
-    def set_blob(self, blob_hash, blob_length):
-        was_set = yield self.hset(BLOB_HASHES, blob_hash, blob_length)
+    def set_blob(self, blob_hash, blob_length, timestamp, host=''):
+        blob_val = json.dumps([blob_length, timestamp, host])
+        was_set = yield self.hset(BLOB_HASHES, blob_hash, blob_val)
         defer.returnValue(was_set)
 
     @defer.inlineCallbacks
     def get_blob(self, blob_hash):
-        length = yield self.hget(BLOB_HASHES, blob_hash)
-        if length is not None:
-            length = int(length)
-        defer.returnValue(length)
+        blob_val = yield self.hget(BLOB_HASHES, blob_hash)
+        [length, timestamp, host] = json.loads(blob_val)
+        defer.returnValue((length, timestamp, host))
 
     @defer.inlineCallbacks
     def delete_blob(self, blob_hash):
@@ -222,7 +224,7 @@ class ClusterStorage(object):
     @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):
         if length is None:
-            length = yield self.db.get_blob(blob_hash)
+            length, timestamp, host = yield self.db.get_blob(blob_hash)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
 
@@ -231,7 +233,7 @@ class ClusterStorage(object):
         log.info("Delete %s", blob_hash)
         exists = yield self.blob_exists(blob_hash)
         if exists:
-            blob_length = yield self.db.get_blob(blob_hash)
+            blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
             yield blob.delete()
             was_deleted = yield self.db.delete_blob(blob_hash)
@@ -243,5 +245,6 @@ class ClusterStorage(object):
     def completed(self, blob_hash, blob_length):
         if not is_valid_blobhash(blob_hash):
             raise InvalidBlobHashError()
-        was_set = yield self.db.set_blob(blob_hash, blob_length)
+        timestamp = time.time()
+        was_set = yield self.db.set_blob(blob_hash, blob_length, timestamp)
         defer.returnValue(was_set)
