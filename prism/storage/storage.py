@@ -4,6 +4,7 @@ import logging
 from redis import Redis
 
 from lbrynet.blob.blob_file import BlobFile
+from lbrynet.core.utils import is_valid_blobhash
 from twisted.internet import defer, threads
 
 from prism.config import get_settings
@@ -126,7 +127,7 @@ class ClusterStorage(object):
     @defer.inlineCallbacks
     def blob_exists(self, blob_hash):
         """True if blob file exists in the cluster"""
-        if len(blob_hash) != BLOB_HASH_LENGTH:
+        if not is_valid_blobhash(blob_hash):
             raise InvalidBlobHashError()
         exists = yield self.db.blob_exists(blob_hash)
         defer.returnValue(exists)
@@ -134,7 +135,7 @@ class ClusterStorage(object):
     @defer.inlineCallbacks
     def blob_has_been_forwarded_to_host(self, blob_hash):
         """True if the blob has been sent to a host"""
-        if len(blob_hash) != BLOB_HASH_LENGTH:
+        if not is_valid_blobhash(blob_hash):
             raise InvalidBlobHashError(blob_hash)
         sent_to_host = yield self.db.blob_has_been_forwarded_to_host(blob_hash)
         defer.returnValue(sent_to_host)
@@ -240,7 +241,7 @@ class ClusterStorage(object):
 
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
-        if len(blob_hash) != BLOB_HASH_LENGTH:
+        if not is_valid_blobhash(blob_hash):
             raise InvalidBlobHashError()
         was_set = yield self.db.set_blob(blob_hash, blob_length)
         defer.returnValue(was_set)
