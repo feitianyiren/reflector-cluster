@@ -68,6 +68,54 @@ class RedisHelper(object):
     def sdiff(self, name, *values):
         return self.defer_func(self.db.sdiff, name, *values)
 
+    @defer.inlineCallbacks
+    def add_blob_to_host(self, blob_hash, host):
+        yield self.sadd(host, blob_hash)
+        yield self.sadd(CLUSTER_BLOBS, blob_hash)
+
+    @defer.inlineCallbacks
+    def add_sd_blob(self, sd_blob_hash, blob_hashes):
+        yield self.sadd(sd_blob_hash, *tuple(blob_hashes))
+        yield self.sadd(SD_BLOB_HASHES, sd_blob_hash)
+
+    @defer.inlineCallbacks
+    def blob_exists(self, blob_hash):
+        exists = yield self.hexists(BLOB_HASHES, blob_hash)
+        defer.returnValue(exists)
+
+    @defer.inlineCallbacks
+    def blob_has_been_forwarded_to_host(self, blob_hash):
+        sent_to_host = yield self.sismember(CLUSTER_BLOBS, blob_hash)
+        defer.returnValue(sent_to_host)
+
+    @defer.inlineCallbacks
+    def get_all_unforwarded_sd_blobs(self):
+        # returns a set of sd_blob hashes that have not been sent to a host
+        out = yield self.sdiff(SD_BLOB_HASHES, CLUSTER_BLOBS)
+        defer.returnValue(out)
+
+    @defer.inlineCallbacks
+    def get_blobs_for_stream(self, sd_hash):
+        blobs_in_stream = yield self.smembers(sd_hash)
+        defer.returnValue(blobs_in_stream)
+
+    @defer.inlineCallbacks
+    def set_blob(self, blob_hash, blob_length):
+        was_set = yield self.hset(BLOB_HASHES, blob_hash, blob_length)
+        defer.returnValue(was_set)
+
+    @defer.inlineCallbacks
+    def get_blob(self, blob_hash):
+        length = yield self.hget(BLOB_HASHES, blob_hash)
+        if length is not None:
+            length = int(length)
+        defer.returnValue(length)
+
+    @defer.inlineCallbacks
+    def delete_blob(self, blob_hash):
+        was_deleted = yield self.hdel(BLOB_HASHES, blob_hash)
+        defer.returnValue(was_deleted)
+
 class ClusterStorage(object):
     def __init__(self, path=None, redis_address=conf['redis server']):
         self.db = RedisHelper(redis_address)
@@ -80,7 +128,7 @@ class ClusterStorage(object):
         """True if blob file exists in the cluster"""
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError()
-        exists = yield self.db.hexists(BLOB_HASHES, blob_hash)
+        exists = yield self.db.blob_exists(blob_hash)
         defer.returnValue(exists)
 
     @defer.inlineCallbacks
@@ -88,13 +136,12 @@ class ClusterStorage(object):
         """True if the blob has been sent to a host"""
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError(blob_hash)
-        sent_to_host = yield self.db.sismember(CLUSTER_BLOBS, blob_hash)
+        sent_to_host = yield self.db.blob_has_been_forwarded_to_host(blob_hash)
         defer.returnValue(sent_to_host)
 
     @defer.inlineCallbacks
     def add_blob_to_host(self, blob_hash, host):
-        out = yield self.db.sadd(host, blob_hash)
-        out = yield self.db.sadd(CLUSTER_BLOBS, blob_hash)
+        yield self.db.add_blob_to_host(blob_hash, host)
 
     @defer.inlineCallbacks
     def get_blobs_for_stream(self, sd_hash):
@@ -102,7 +149,7 @@ class ClusterStorage(object):
         Return a list of blobs that belong to stream with sd_hash
         raise Exception if the sd_hash is unknown
         """
-        blobs_in_stream = yield self.db.smembers(sd_hash)
+        blobs_in_stream = yield self.db.get_blobs_for_stream(sd_hash)
         if blobs_in_stream is None:
             raise Exception('unknown sd_hash:%s',sd_hash)
         out = []
@@ -118,7 +165,7 @@ class ClusterStorage(object):
         that we do not have
         """
 
-        blobs_in_stream = yield self.db.smembers(sd_hash)
+        blobs_in_stream = yield self.db.get_blobs_for_stream(sd_hash)
         missing_blobs = []
 
         if blobs_in_stream:
@@ -162,22 +209,19 @@ class ClusterStorage(object):
             if 'blob_hash' in blob and 'length' in blob:
                 blob_hashes.append(blob['blob_hash'])
         if blob_hashes:
-            yield self.db.sadd(sd_blob.blob_hash, *tuple(blob_hashes))
-            yield self.db.sadd(SD_BLOB_HASHES, sd_blob.blob_hash)
+            yield self.db.add_sd_blob(sd_blob.blob_hash, blob_hashes)
         defer.returnValue(decoded_sd_blob)
 
     @defer.inlineCallbacks
     def get_all_unforwarded_sd_blobs(self):
         # returns a set of sd_blob hashes that have not been sent to a host
-        out = yield self.db.sdiff(SD_BLOB_HASHES, CLUSTER_BLOBS)
+        out = yield self.db.get_all_unforwarded_sd_blobs()
         defer.returnValue(out)
 
     @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):
         if length is None:
-            length = yield self.db.hget(BLOB_HASHES, blob_hash)
-            if length is not None:
-                length = int(length)
+            length = yield self.db.get_blob(blob_hash)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
 
@@ -186,10 +230,10 @@ class ClusterStorage(object):
         log.info("Delete %s", blob_hash)
         exists = yield self.blob_exists(blob_hash)
         if exists:
-            blob_length = yield self.db.hget(BLOB_HASHES, blob_hash)
+            blob_length = yield self.db.get_blob(blob_hash)
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
             yield blob.delete()
-            was_deleted = yield self.db.hdel(BLOB_HASHES, blob_hash)
+            was_deleted = yield self.db.delete_blob(blob_hash)
             defer.returnValue(was_deleted)
         else:
             defer.returnValue(False)
@@ -198,5 +242,5 @@ class ClusterStorage(object):
     def completed(self, blob_hash, blob_length):
         if len(blob_hash) != BLOB_HASH_LENGTH:
             raise InvalidBlobHashError()
-        was_set = yield self.db.hset(BLOB_HASHES, blob_hash, blob_length)
+        was_set = yield self.db.set_blob(blob_hash, blob_length)
         defer.returnValue(was_set)
