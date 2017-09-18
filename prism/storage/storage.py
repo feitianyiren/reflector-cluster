@@ -119,6 +119,8 @@ class RedisHelper(object):
     @defer.inlineCallbacks
     def get_blob(self, blob_hash):
         blob_val = yield self.hget(BLOB_HASHES, blob_hash)
+        if blob_val is None:
+            raise Exception("Blob does not exist")
         [length, timestamp, host] = json.loads(blob_val)
         defer.returnValue((length, timestamp, host))
 
@@ -232,7 +234,9 @@ class ClusterStorage(object):
     @defer.inlineCallbacks
     def get_blob(self, blob_hash, length=None):
         if length is None:
-            length, timestamp, host = yield self.db.get_blob(blob_hash)
+            blob_exists = yield self.db.blob_exists(blob_hash)
+            if blob_exists:
+                length, timestamp, host = yield self.db.get_blob(blob_hash)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
 
