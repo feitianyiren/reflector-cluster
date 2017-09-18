@@ -7,7 +7,8 @@ requires = [
     'pycrypto==2.6.1',
     'rq==0.8.0',
     'pyyaml==3.12',
-    'psutil==5.2.2'
+    'psutil==5.2.2',
+    'lbrynet'
 ]
 console_scripts = [
     'prism-server = prism.server:main',
