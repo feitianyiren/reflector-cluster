@@ -89,6 +89,9 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         log.exception("Job (pid %s) encountered unexpected error")
         return sys.exit(1)
 
+def factory_setup_error(error):
+    log.error("Error when setting up factory:%s",error)
+    reactor.stop()
 
 def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
     log.debug("process blob pid %s", os.getpid())
@@ -102,6 +105,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
     else:
         d = defer.succeed(True)
     d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
+    d.adErrback(factory_setup_error)
     d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, blob_hash))
     reactor.run()
     return sys.exit(0)
@@ -117,6 +121,7 @@ def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_in
     else:
         d = defer.succeed(True)
     d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage))
+    d.addErrback(factory_setup_error)
     d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, sd_hash))
     reactor.run()
     return sys.exit(0)
@@ -138,5 +143,4 @@ def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
     host_infos = host_getter(redis_connection)
-
     q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)
