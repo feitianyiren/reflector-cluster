@@ -66,6 +66,9 @@ class RedisHelper(object):
     def sadd(self, name, *values):
         return self.defer_func(self.db.sadd, name, *values)
 
+    def srem(self, name, *values):
+        return self.defer_func(self.db.srem, name, *values)
+
     def sdiff(self, name, *values):
         return self.defer_func(self.db.sdiff, name, *values)
 
