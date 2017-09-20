@@ -73,6 +73,11 @@ class RedisHelper(object):
         return self.defer_func(self.db.sdiff, name, *values)
 
     @defer.inlineCallbacks
+    def is_sd_blob(self, blob_hash):
+        out = yield self.sismember(SD_BLOB_HASHES, blob_hash)
+        defer.returnValue(out)
+
+    @defer.inlineCallbacks
     def add_blob_to_host(self, blob_hash, host):
         yield self.sadd(host, blob_hash)
         yield self.sadd(CLUSTER_BLOBS, blob_hash)
@@ -230,6 +235,25 @@ class ClusterStorage(object):
             length, timestamp, host = yield self.db.get_blob(blob_hash)
         blob = BlobFile(self.db_dir, blob_hash, length)
         defer.returnValue(blob)
+
+    @defer.inlineCallbacks
+    def get_blob_host(self, blob_hash):
+        # get current host of blob, will be empty string if its not on any
+        # host
+        length, timestamp, host = yield self.db.get_blob(blob_hash)
+        defer.returnValue(host)
+
+    @defer.inlineCallbacks
+    def get_blob_timestamp(self, blob_hash):
+        # get timestamp of when blob was sent to the cluster
+        length, timestamp, host = yield self.db.get_blob(blob_hash)
+        defer.returnValue(timestamp)
+
+    @defer.inlineCallbacks
+    def is_sd_blob(self, blob_hash):
+        # True if blob_hash refers to an sd_blob, False otherwise
+        out = yield self.db.is_sd_blob(blob_hash)
+        defer.returnValue(out)
 
     @defer.inlineCallbacks
     def delete(self, blob_hash):
