@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+import random
 
 from redis import Redis
 from rq import Queue
@@ -42,10 +43,13 @@ def next_host(redis_conn):
         else:
             address, port = host, 5566
         count = redis_conn.scard(address)
-        host_info["%s:%i" % (address, port)] = count
-    for host, blob_count in sorted(host_info.iteritems(), key=lambda x: x[1]):
-        address, port = host.split(":")
-        return address, int(port), blob_count
+        if count < 500000: # 1 terabyte disk / 2 mb blobs
+            host_info["%s:%i" % (address, port)] = count
+
+    host = random.choice(host_info.keys())
+    address, port = host.split(":")
+    blob_count = host_info[host]
+    return address, int(port), blob_count
 
 
 def get_blob_path(blob_hash, blob_storage):
