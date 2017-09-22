@@ -20,7 +20,8 @@ conf = get_settings()
 BLOB_HASHES = "blob_hashes" # contains all blob hashes (including SD blob hashes), value is length
 CLUSTER_BLOBS = "cluster_blobs" # contains blob hases that have been sent to a reflector node
 SD_BLOB_HASHES = 'sd_blob_hashes' # contain all SD blob hashes
-
+# each sd_blob_hash is its own table, stores blobs is stream
+# each host is its own table, stores all blob hashes it has
 
 # set of node addresses
 CLUSTER_NODE_ADDRESSES = conf['hosts']
@@ -44,6 +45,9 @@ class RedisHelper(object):
             self.defer_func = defer.execute
         else:
             self.defer_func = threads.deferToThread
+
+    def delete(self, key):
+        return self.defer_func(self.db.delete, key)
 
     def hget(self, name, key):
         return self.defer_func(self.db.hget, name, key)
@@ -128,6 +132,11 @@ class RedisHelper(object):
     def delete_blob(self, blob_hash):
         was_deleted = yield self.hdel(BLOB_HASHES, blob_hash)
         defer.returnValue(was_deleted)
+
+    @defer.inlineCallbacks
+    def delete_sd_blob(self, blob_hash):
+        yield self.srem(SD_BLOB_HASHES, blob_hash)
+        yield self.delete(blob_hash)
 
 class ClusterStorage(object):
     def __init__(self, path=None, redis_address=conf['redis server']):
@@ -268,6 +277,10 @@ class ClusterStorage(object):
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
             yield blob.delete()
             was_deleted = yield self.db.delete_blob(blob_hash)
+            is_sd_blob = yield self.is_sd_blob(blob_hash)
+            if is_sd_blob:
+                yield self.db.delete_sd_blob(blob_hash)
+
             defer.returnValue(was_deleted)
         else:
             defer.returnValue(False)
