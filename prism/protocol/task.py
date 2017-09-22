@@ -43,7 +43,7 @@ def next_host(redis_conn):
         else:
             address, port = host, 5566
         count = redis_conn.scard(address)
-        if count < 500000: # 1 terabyte disk / 2 mb blobs
+        if count < settings['max blobs']:
             host_info["%s:%i" % (address, port)] = count
 
     host = random.choice(host_info.keys())
