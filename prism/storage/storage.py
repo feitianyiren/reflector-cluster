@@ -6,6 +6,9 @@ from redis import Redis
 
 from lbrynet.blob.blob_file import BlobFile
 from lbrynet.core.utils import is_valid_blobhash
+from lbrynet import conf
+conf.initialize_settings() #needed since BlobFile needs nconf
+
 from twisted.internet import defer, threads
 
 from prism.config import get_settings
