@@ -125,7 +125,13 @@ class RedisHelper(object):
         blob_val = yield self.hget(BLOB_HASHES, blob_hash)
         if blob_val is None:
             raise Exception("Blob does not exist")
-        [length, timestamp, host] = json.loads(blob_val)
+        try:
+            [length, timestamp, host] = json.loads(blob_val)
+        except TypeError as e:
+            # older blob entries just had length as blob_val
+            length = int(blob_val)
+            timestamp = 0
+            host = ''
         defer.returnValue((length, timestamp, host))
 
     @defer.inlineCallbacks
