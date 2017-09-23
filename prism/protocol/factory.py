@@ -35,6 +35,8 @@ class PrismServerFactory(ServerFactory):
         return p
 
     def startFactory(self):
+        pass
+        """
         blobs = os.listdir(self.storage.db_dir)
         if blobs:
             log.warning("%i blobs need to be sent from previous run", len(blobs))
@@ -42,7 +44,7 @@ class PrismServerFactory(ServerFactory):
             for i, blob_hash in enumerate(blobs):
                 enqueue_blob(blob_hash, self.storage.db_dir, build_prism_blob_client_factory)
             log.info("queued blobs, starting server")
-
+        """
 class PrismClientFactory(ClientFactory):
     protocol = BlobReflectorClient
 
