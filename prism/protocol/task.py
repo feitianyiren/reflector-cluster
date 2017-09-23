@@ -109,7 +109,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
     else:
         d = defer.succeed(True)
     d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
-    d.adErrback(factory_setup_error)
+    d.addErrback(factory_setup_error)
     d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, blob_hash))
     reactor.run()
     return sys.exit(0)
