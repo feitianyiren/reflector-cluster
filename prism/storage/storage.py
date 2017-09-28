@@ -148,8 +148,8 @@ class RedisHelper(object):
         yield self.delete(blob_hash)
 
 class ClusterStorage(object):
-    def __init__(self, path=None, redis_address=conf['redis server']):
-        self.db = RedisHelper(redis_address)
+    def __init__(self, path=None, redis_address=None):
+        self.db = RedisHelper(redis_address or conf['redis server'])
         self.db_dir = path or os.path.expandvars(conf['blob directory'])
         if not os.path.isdir(self.db_dir):
             raise OSError("blob storage directory \"%s\" does not exist" % self.db_dir)
