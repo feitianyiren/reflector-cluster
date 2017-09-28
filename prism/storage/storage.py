@@ -210,7 +210,7 @@ class ClusterStorage(object):
             sd_exists_locally = yield self.blob_exists(sd_hash)
             if sd_exists_locally:
                 sd_blob = yield self.get_blob(sd_hash)
-                if sd_blob.is_validated():
+                if sd_blob.verified:
                     missing_blobs = yield self.determine_missing_local_blobs(sd_blob)
                     defer.returnValue(missing_blobs)
             missing_blobs = None
@@ -226,7 +226,7 @@ class ClusterStorage(object):
                 in_cluster = yield self.blob_has_been_forwarded_to_host(blob_hash)
                 if not in_cluster:
                     blob = yield self.get_blob(blob_hash, blob_len)
-                    if not blob.is_validated():
+                    if not blob.verified:
                         needed.append(blob_hash)
         defer.returnValue(needed)
 
