@@ -94,8 +94,10 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         return sys.exit(1)
 
 def factory_setup_error(error):
+    from twisted.internet import reactor
     log.error("Error when setting up factory:%s",error)
-    reactor.stop()
+    reactor.fireSystemEvent("shutdown")
+    return sys.exit(1)
 
 def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
     log.debug("process blob pid %s", os.getpid())
