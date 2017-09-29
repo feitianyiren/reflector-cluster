@@ -1,8 +1,8 @@
 from prism.protocol.task import  process_blob, process_stream, get_blob_path
 from prism.protocol.factory import PrismClientFactory, PrismStreamClientFactory, PrismServerFactory, build_prism_stream_client_factory, build_prism_stream_server_factory
 from prism.storage.storage import ClusterStorage
-from prism.protocol.blob import BlobFile
 
+from lbrynet.blob.blob_file import BlobFile
 from twisted.internet import defer, task
 
 import unittest

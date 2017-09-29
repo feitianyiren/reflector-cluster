@@ -7,7 +7,7 @@ from twisted.trial import unittest
 from twisted.internet import defer
 
 from prism.storage.storage import ClusterStorage
-from prism.protocol.blob import BlobFile
+from lbrynet.blob.blob_file import BlobFile
 
 class TestClusterStorage(unittest.TestCase):
     def setUp(self):
