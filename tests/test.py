@@ -3,7 +3,7 @@ import os
 import sys
 
 from prism import config
-from prism.task import process_blob
+from prism.protocol.task import process_blob
 
 from redis import Redis
 from rq import Queue

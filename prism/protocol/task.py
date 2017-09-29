@@ -2,13 +2,16 @@ import os
 import sys
 import time
 import logging
+import random
 
 from redis import Redis
 from rq import Queue
 from redis.exceptions import ConnectionError
 from rq.timeouts import JobTimeoutException
 
-from prism.storage.storage import ClusterStorage
+from twisted.internet import defer, task
+
+from prism.storage.storage import ClusterStorage, get_redis_connection
 from prism.config import get_settings
 
 settings = get_settings()
@@ -19,8 +22,6 @@ HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
 
 log = logging.getLogger(__name__)
-redis_conn = Redis(REDIS_ADDRESS)
-
 
 def retry_redis(fn):
     def _wrapper(*a, **kw):
@@ -33,7 +34,7 @@ def retry_redis(fn):
     return _wrapper
 
 
-def next_host():
+def next_host(redis_conn):
     host_info = {}
     for host in HOSTS:
         if ":" in host:
@@ -42,42 +43,110 @@ def next_host():
         else:
             address, port = host, 5566
         count = redis_conn.scard(address)
-        host_info["%s:%i" % (address, port)] = count
-    for host, blob_count in sorted(host_info.iteritems(), key=lambda x: x[1]):
-        address, port = host.split(":")
-        return address, int(port), blob_count
+        if count < settings['max blobs']:
+            host_info["%s:%i" % (address, port)] = count
+
+    host = random.choice(host_info.keys())
+    address, port = host.split(":")
+    blob_count = host_info[host]
+    return address, int(port), blob_count
 
 
-def process_blob(blob_hash, client_factory_class):
-    log.debug("process blob pid %s", os.getpid())
-    blob_path = os.path.join(BLOB_DIR, blob_hash)
-    if not os.path.isfile(blob_path):
-        log.warning("%s does not exist", blob_path)
-        return sys.exit(0)
-    host, port, host_blob_count = next_host()
-    factory = client_factory_class(ClusterStorage(BLOB_DIR), [blob_hash])
+def get_blob_path(blob_hash, blob_storage):
+    return os.path.join(blob_storage.db_dir, blob_hash)
+
+@defer.inlineCallbacks
+def update_sent_blobs(blob_hashes_sent, host, blob_storage):
+    for blob_hash in blob_hashes_sent:
+        log.info("updating sent blob %s", blob_hash)
+        res = yield blob_storage.add_blob_to_host(blob_hash, host)
+        blob_path = get_blob_path(blob_hash, blob_storage)
+        if os.path.isfile(blob_path):
+            log.debug('removing %s', blob_path)
+            os.remove(blob_path)
+
+def connect_factory(host, port, factory, blob_storage, hash_to_process):
+    from twisted.internet import reactor
+    @defer.inlineCallbacks
+    def on_finish(result):
+        log.info("Finished sending %s", hash_to_process)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+    @defer.inlineCallbacks
+    def on_error(error):
+        log.error("Error when sending %s: %s. Hashes sent %s", hash_to_process, error,
+                                                            factory.p.blob_hashes_sent)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+
+    factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
     try:
-        from twisted.internet import reactor
-        reactor.connectTCP(host, port, factory)
-        reactor.run()
-        blobs_sent = factory.p.blob_hashes_sent
-        if blobs_sent[0] == blob_hash:
-            redis_conn.sadd(host, blob_hash)
-            redis_conn.sadd("cluster_blobs", blob_hash)
-            if os.path.isfile(blob_path):
-                os.remove(blob_path)
-            log.info("Forwarded %s --> %s, host has %i blobs", blob_hash[:8], host,
-                     host_blob_count)
-        return sys.exit(0)
+        connection = reactor.connectTCP(host, port, factory)
     except JobTimeoutException:
-        log.error("Failed to forward %s --> %s", blob_hash[:8], host)
+        log.error("Failed to forward %s --> %s", hash_to_process[:8], host)
         return sys.exit(0)
     except Exception as err:
         log.exception("Job (pid %s) encountered unexpected error")
         return sys.exit(1)
 
+def factory_setup_error(error):
+    from twisted.internet import reactor
+    log.error("Error when setting up factory:%s",error)
+    reactor.fireSystemEvent("shutdown")
+    return sys.exit(1)
+
+def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
+    log.debug("process blob pid %s", os.getpid())
+    host, port, host_blob_count = host_infos
+
+    blob_storage = ClusterStorage(db_dir, redis_address)
+
+    from twisted.internet import reactor
+    if setup_d is not None:
+        d = setup_d()
+    else:
+        d = defer.succeed(True)
+    d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
+    d.addErrback(factory_setup_error)
+    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, blob_hash))
+    reactor.run()
+    return sys.exit(0)
+
+
+def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
+    log.debug("processing stream pid %s", os.getpid())
+    host, port, host_blob_count = host_infos
+    blob_storage = ClusterStorage(db_dir, redis_address)
+    from twisted.internet import reactor
+    if setup_d is not None:
+        d = setup_d()
+    else:
+        d = defer.succeed(True)
+    d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage))
+    d.addErrback(factory_setup_error)
+    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, sd_hash))
+    reactor.run()
+    return sys.exit(0)
+
 
 @retry_redis
-def enqueue_blob(blob_hash, client_factory_class):
-    q = Queue(connection=redis_conn)
-    q.enqueue(process_blob, blob_hash, client_factory_class, timeout=60)
+def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, redis_address=settings['redis server'],
+                   host_getter=next_host):
+
+    timeout = (num_blobs_in_stream+1)*30
+    redis_connection = get_redis_connection(redis_address)
+    q = Queue(connection=redis_connection)
+    host_infos = host_getter(redis_connection)
+    q.enqueue(process_stream, sd_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=timeout)
+
+@retry_redis
+def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'], host_getter=next_host):
+
+    redis_connection = get_redis_connection(redis_address)
+    q = Queue(connection=redis_connection)
+    host_infos = host_getter(redis_connection)
+    q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)

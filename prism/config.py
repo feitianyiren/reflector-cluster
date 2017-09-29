@@ -17,6 +17,7 @@ def get_settings():
     LISTEN_ON = "listen"
     WORKERS = "workers"
     REDIS_SERVER = "redis server"
+    ENQUEUE_ON_STARTUP = "enqueue on startup"
 
     settings_types = {
         LISTEN_ON: str,
@@ -25,6 +26,7 @@ def get_settings():
         BLOB_DIR: str,
         WORKERS: int,
         REDIS_SERVER: str,
+        ENQUEUE_ON_STARTUP: bool
     }
 
     default_conf = {
@@ -32,9 +34,10 @@ def get_settings():
         HOSTS: [
             "jack.lbry.tech",
         ],
-        MAX_BLOBS_PER_HOST: 50000,
+        MAX_BLOBS_PER_HOST: 500000, # assuming 1 terabyte disk / 2 mb blobs
         BLOB_DIR: os.path.expanduser("~/.prism"),
         REDIS_SERVER: "localhost",
+        ENQUEUE_ON_STARTUP: True
     }
 
     settings = {}

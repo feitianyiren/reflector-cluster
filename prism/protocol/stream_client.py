@@ -10,8 +10,15 @@ from prism.error import IncompleteResponse
 log = logging.getLogger(__name__)
 
 
-class BlobReflectorClient(Protocol):
-    #  Protocol stuff
+class StreamReflectorClient(Protocol):
+    def __init__(self, sd_blob, blobs):
+        # sd blob to send
+        self.sd_blob = sd_blob
+        # list of blobs in the stream to send
+        self.blobs = blobs
+        # hashes of blobs sent
+        self.blob_hashes_sent = []
+
 
     def connectionMade(self):
         self.response_buff = ''
@@ -19,10 +26,12 @@ class BlobReflectorClient(Protocol):
         self.next_blob_to_send = None
         self.blob_read_handle = None
         self.received_handshake_response = False
+        self.received_descriptor_response = False
         self.file_sender = None
         self.producer = None
         self.streaming = False
-        self.sent_blobs = False
+        self.sent_stream_info = False
+
         d = self.send_handshake()
         d.addErrback(lambda err: log.warning("An error occurred immediately: %s", err.getTraceback()))
 
@@ -75,11 +84,12 @@ class BlobReflectorClient(Protocol):
 
     def response_failure_handler(self, err):
         log.warning("An error occurred handling the response: %s", err.getTraceback())
-        return self.disconnect(err)
 
     def handle_response(self, response_dict):
         if self.received_handshake_response is False:
             return self.handle_handshake_response(response_dict)
+        elif not self.received_descriptor_response:
+            return self.handle_descriptor_response(response_dict)
         else:
             return self.handle_normal_response(response_dict)
 
@@ -91,13 +101,12 @@ class BlobReflectorClient(Protocol):
         self.file_sender = None
         return defer.succeed(None)
 
-    @defer.inlineCallbacks
     def start_transfer(self):
         if self.read_handle is None:
             raise Exception("self.read_handle was None when trying to start the transfer")
-        yield self.file_sender.beginFileTransfer(self.read_handle, self)
-        self.sent_blobs = True
-        self.blob_hashes_sent.append(self.next_blob_to_send.blob_hash)
+        d = self.file_sender.beginFileTransfer(self.read_handle, self)
+        d.addCallback(lambda _: self.blob_hashes_sent.append(self.next_blob_to_send.blob_hash))
+        return d
 
     def handle_handshake_response(self, response_dict):
         if 'version' not in response_dict:
@@ -108,6 +117,40 @@ class BlobReflectorClient(Protocol):
             raise ValueError("I can't handle protocol version {}!".format(self.protocol_version))
         self.received_handshake_response = True
         return defer.succeed(True)
+
+    def get_blobs_to_send(self):
+        if not self.descriptor_needed:
+            blobs = [blob for blob in self.blobs if blob.blob_hash in self.needed_blobs]
+        else:
+            blobs = self.blobs
+        self.blobs_to_send = blobs
+        return defer.succeed(True)
+
+
+    def handle_descriptor_response(self, response_dict):
+        if self.file_sender is None:  # Expecting Server Info Response
+            if 'send_sd_blob' not in response_dict:
+                raise ReflectorRequestError("I don't know whether to send the sd blob or not!")
+            if response_dict['send_sd_blob'] is True:
+                self.file_sender = FileSender()
+            else:
+                self.received_descriptor_response = True
+            self.descriptor_needed = response_dict['send_sd_blob']
+            self.needed_blobs = response_dict.get('needed_blobs', [])
+            return self.get_blobs_to_send()
+        else:  # Expecting Server Blob Response
+            if 'received_sd_blob' not in response_dict:
+                raise ValueError("I don't know if the sd blob made it to the intended destination!")
+            else:
+                self.received_descriptor_response = True
+                if response_dict['received_sd_blob']:
+                    log.info("Sent reflector descriptor %s", self.next_blob_to_send)
+                else:
+                    log.warning("Reflector failed to receive descriptor %s for %s",
+                                self.next_blob_to_send, self.name)
+                    self.blobs_to_send.append(self.next_blob_to_send)
+                return self.set_not_uploading()
+
 
     def handle_normal_response(self, response_dict):
         if self.file_sender is None:  # Expecting Server Info Response
@@ -138,32 +181,42 @@ class BlobReflectorClient(Protocol):
     def send_blob_info(self):
         log.debug("Send blob info for %s", self.next_blob_to_send.blob_hash)
         assert self.next_blob_to_send is not None, "need to have a next blob to send at this point"
+        log.debug('sending blob info')
         self.write(json.dumps({
             'blob_hash': self.next_blob_to_send.blob_hash,
             'blob_size': self.next_blob_to_send.length
         }))
 
+    def send_descriptor_info(self):
+        r = {
+            'sd_blob_hash': self.sd_blob.blob_hash,
+            'sd_blob_size': self.sd_blob.length
+        }
+        self.sent_stream_info = True
+        self.write(json.dumps(r))
+
     def disconnect(self, err):
         self.transport.loseConnection()
 
-    @defer.inlineCallbacks
     def send_next_request(self):
         if self.file_sender is not None:
             # send the blob
             log.debug('Sending the blob')
-            yield self.start_transfer()
-        elif self.blob_hashes_to_send:
+            return self.start_transfer()
+
+        elif not self.sent_stream_info:
+            log.debug('Sending the sd hash')
+            self.open_blob_for_reading(self.sd_blob)
+            self.send_descriptor_info()
+            return defer.succeed(True)
+
+        elif self.blobs_to_send:
             # open the next blob to send
-            blob_hash = self.blob_hashes_to_send[0]
-            log.debug('No current blob, sending the next one: %s', blob_hash)
-            self.blob_hashes_to_send = self.blob_hashes_to_send[1:]
-            blob = yield self.blob_storage.get_blob(blob_hash)
-            try:
-                self.open_blob_for_reading(blob)
-                # send the server the next blob hash + length
-                self.send_blob_info()
-            except ValueError:
-                yield self.send_next_request()
+            blob = self.blobs_to_send[0]
+            self.blobs_to_send = self.blobs_to_send[1:]
+            self.open_blob_for_reading(blob)
+            self.send_blob_info()
+            return defer.succeed(True)
         else:
             # close connection
             log.debug('No more blob hashes, closing connection')
