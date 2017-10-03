@@ -4,13 +4,16 @@ import logging
 from twisted.protocols.basic import FileSender
 from twisted.internet.protocol import Protocol
 from twisted.internet import defer, error, reactor
+from twisted.protocols.policies import TimeoutMixin
+
 from prism.error import IncompleteResponse
 
 
 log = logging.getLogger(__name__)
 
 
-class StreamReflectorClient(Protocol):
+class StreamReflectorClient(Protocol, TimeoutMixin):
+    PROTOCOL_TIMEOUT = 30
     def __init__(self, sd_blob, blobs):
         # sd blob to send
         self.sd_blob = sd_blob
@@ -31,11 +34,15 @@ class StreamReflectorClient(Protocol):
         self.producer = None
         self.streaming = False
         self.sent_stream_info = False
+        # needed for TimeoutMixin
+        self.callLater = reactor.callLater
+        self.setTimeout(self.PROTOCOL_TIMEOUT)
 
         d = self.send_handshake()
         d.addErrback(lambda err: log.warning("An error occurred immediately: %s", err.getTraceback()))
 
     def dataReceived(self, data):
+        self.setTimeout(self.PROTOCOL_TIMEOUT)
         log.debug('Received %s', data)
         self.response_buff += data
         try:
@@ -49,6 +56,7 @@ class StreamReflectorClient(Protocol):
             d.addErrback(self.response_failure_handler)
 
     def connectionLost(self, reason):
+        self.setTimeout(None)
         if reason.check(error.ConnectionDone):
             self.factory.on_connection_lost_d.callback(None)
             log.debug('Reflector finished: %s', reason)
