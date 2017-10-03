@@ -61,7 +61,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
         self.setTimeout(None)
-        log.debug("upload from %s finished", self.peer.host)
+        log.info("Connection lost to %s: %s", self.peer.host, reason)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
