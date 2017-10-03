@@ -232,8 +232,9 @@ class ClusterStorage(object):
 
     @defer.inlineCallbacks
     def load_sd_blob(self, sd_blob):
-        with sd_blob.open_for_reading() as sd_file:
-            sd_blob_data = sd_file.read()
+        sd_file = sd_blob.open_for_reading()
+        sd_blob_data = sd_file.read()
+        sd_file.close()
         decoded_sd_blob = json.loads(sd_blob_data)
         blob_hashes = []
         for blob in decoded_sd_blob['blobs']:
