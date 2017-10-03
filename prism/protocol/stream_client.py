@@ -21,6 +21,7 @@ class StreamReflectorClient(Protocol):
 
 
     def connectionMade(self):
+        log.info("Connection made")
         self.response_buff = ''
         self.outgoing_buff = ''
         self.next_blob_to_send = None

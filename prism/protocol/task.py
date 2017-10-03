@@ -120,6 +120,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos, setup_d=None):
     log.info("processing stream pid %s", os.getpid())
     host, port, host_blob_count = host_infos
+    log.info("connecting to %s %s", host, port)
     blob_storage = ClusterStorage(db_dir, redis_address)
     from twisted.internet import reactor
     log.info("initialized storage %s %s", db_dir, redis_address)
