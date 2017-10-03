@@ -134,6 +134,7 @@ def build_prism_stream_client_factory(sd_hash, blob_storage):
     for b in blobs:
         if not b.verified:
             raise Exception("blob %s is not verified", b.blob_hash)
+    log.info("Finished building")
     defer.returnValue(PrismStreamClientFactory(blob_storage, sd_blob, blobs))
 
 @defer.inlineCallbacks
