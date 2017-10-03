@@ -50,6 +50,7 @@ class StreamReflectorClient(Protocol):
             d.addErrback(self.response_failure_handler)
 
     def connectionLost(self, reason):
+        log.debug("connection lost, reason:%s", reason)
         if reason.check(error.ConnectionDone):
             self.factory.on_connection_lost_d.callback(None)
             log.debug('Reflector finished: %s', reason)
