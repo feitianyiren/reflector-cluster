@@ -2,10 +2,13 @@ import json
 import os
 import random
 import logging
+
 from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
 from twisted.python import failure
 from twisted.internet.error import ConnectionDone
+from twisted.protocols.policies import TimeoutMixin
+
 from lbrynet.core.utils import is_valid_blobhash
 
 from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
@@ -28,7 +31,8 @@ NUM_HOSTS = len(HOSTS) - 1
 log = logging.getLogger(__name__)
 
 
-class ReflectorServerProtocol(Protocol):
+class ReflectorServerProtocol(Protocol, TimeoutMixin):
+    PROTOCOL_TIMEOUT = 30
     def __init__(self, blob_storage, task_after_completed_blob=None):
         self.blob_storage = blob_storage
         # this is a function that is scheduled whenever we've received a blob
@@ -51,8 +55,12 @@ class ReflectorServerProtocol(Protocol):
         self.blob_writer = None
         self.blob_finished_d = None
         self.request_buff = ""
+        # needed for TimeoutMixin
+        self.callLater = reactor.callLater
+        self.setTimeout(self.PROTOCOL_TIMEOUT)
 
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
+        self.setTimeout(None)
         log.debug("upload from %s finished", self.peer.host)
 
     def handle_error(self, err):
@@ -119,6 +127,7 @@ class ReflectorServerProtocol(Protocol):
     ####################
 
     def dataReceived(self, data):
+        self.setTimeout(self.PROTOCOL_TIMEOUT)
         if self.receiving_blob:
             self.blob_writer.write(data)
         else:
