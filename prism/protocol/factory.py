@@ -122,14 +122,15 @@ def build_prism_stream_client_factory(sd_hash, blob_storage):
     blob_exists = yield blob_storage.blob_exists(sd_hash)
     if not blob_exists:
         raise Exception("blob does not exist in cluster")
-
+    log.info("blob exists")
     blob_forwarded = yield blob_storage.blob_has_been_forwarded_to_host(sd_hash)
     if blob_forwarded:
         raise Exception("blob has been forwarded")
-
+    log.info("blob unforwarded")
     sd_blob = yield blob_storage.get_blob(sd_hash)
     if not sd_blob.verified:
         raise Exception("cannot send unverified sd blob")
+    log.info("verified sd blob")
     blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
     for b in blobs:
         if not b.verified:

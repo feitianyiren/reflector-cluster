@@ -122,7 +122,7 @@ def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_in
     host, port, host_blob_count = host_infos
     blob_storage = ClusterStorage(db_dir, redis_address)
     from twisted.internet import reactor
-    log_info("initialized storage %s %s", db_dir, redis_address)
+    log.info("initialized storage %s %s", db_dir, redis_address)
     if setup_d is not None:
         d = setup_d()
     else:
