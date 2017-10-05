@@ -31,18 +31,20 @@ def check_blob_hash(blob_hash):
     if not blob_exists:
         print("Blob does not exist in cluster")
         reactor.stop()
-
+    
     host = yield storage.get_blob_host(blob_hash)
     timestamp = yield storage.get_blob_timestamp(blob_hash)
+    length, _, _= yield storage.db.get_blob(blob_hash)
     timestamp = float(timestamp)
     date_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-    print("HOST:{}, Time when blob entered cluster:{}".format(host, date_time))
+    print("HOST:{} (empty if not in host), Time when blob entered cluster:{}, length:{}".format(host, date_time, length))
 
     is_sd_blob = yield storage.is_sd_blob(blob_hash)
     if is_sd_blob:
         print("Blob is an SD blob")
         # check if its blobs has been forwarded properly to hosts
         blobs = yield storage.db.get_blobs_for_stream(blob_hash)
+        print("{} blobs in stream".format(len(blobs)))
         for blob in blobs:
             blob_exists = yield storage.blob_exists(blob)
             if not blob_exists:
@@ -51,7 +53,10 @@ def check_blob_hash(blob_hash):
             blob_host = yield storage.get_blob_host(blob)
             if blob_host != host:
                 print("found a blob in stream that is in a different host:{}".format(blob_host))
-
+            if len(host) == 0:# if not on host check
+                blob = yield storage.get_blob(blob)
+                if not blob.verified:
+                    print("found unverified blob on host:{}".format(blob))
     else:
         print("Blob is not an SD blob")
     reactor.stop()
