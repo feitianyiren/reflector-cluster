@@ -293,6 +293,8 @@ class ClusterStorage(object):
         exists = yield self.blob_exists(blob_hash)
         if exists:
             blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
+            if len(host) > 0: # blob is on a host
+                raise Exception("Cannot delete blob on a host, use delete_from_host")
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
             yield blob.delete()
             was_deleted = yield self.db.delete_blob(blob_hash)
