@@ -6,7 +6,7 @@ import time
 from twisted.trial import unittest
 from twisted.internet import defer
 
-from prism.storage.storage import ClusterStorage
+from prism.storage.storage import ClusterStorage, CLUSTER_BLOBS
 from lbrynet.blob.blob_file import BlobFile
 
 class TestClusterStorage(unittest.TestCase):
@@ -71,6 +71,27 @@ class TestClusterStorage(unittest.TestCase):
         out = yield self.cs.is_sd_blob(blob_hash)
         self.assertFalse(out)
 
+        # add blob to host
+        out = yield self.cs.add_blob_to_host(blob_hash, 'somehost')
+        out = yield self.cs.get_blob_host(blob_hash)
+        self.assertEqual(out, 'somehost')
+        out = yield self.cs.db.sismember('somehost', blob_hash)
+        self.assertTrue(out)
+        out = yield self.cs.db.sismember(CLUSTER_BLOBS, blob_hash)
+        self.assertTrue(out)
+
+
+        # remove blob from host
+        out = yield self.cs.delete_blob_from_host(blob_hash)
+        out = yield self.cs.get_blob_host(blob_hash)
+        self.assertEqual(len(out), 0)
+        out = yield self.cs.db.sismember('somehost', blob_hash)
+        self.assertFalse(out)
+        out = yield self.cs.db.sismember(CLUSTER_BLOBS, blob_hash)
+        self.assertFalse(out)
+
+
+        # delete the blob
         out = yield self.cs.delete(blob_hash)
         out = yield self.cs.blob_exists(blob_hash)
         self.assertEqual(False, out)
