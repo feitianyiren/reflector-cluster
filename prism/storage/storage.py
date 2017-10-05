@@ -20,9 +20,12 @@ log = logging.getLogger(__name__)
 conf = get_settings()
 
 # table names
-BLOB_HASHES = "blob_hashes" # contains all blob hashes (including SD blob hashes), value is length
-CLUSTER_BLOBS = "cluster_blobs" # contains blob hases that have been sent to a reflector node
-SD_BLOB_HASHES = 'sd_blob_hashes' # contain all SD blob hashes
+# contains all blob hashes (including SD blob hashes), value is json encoded length, timestamp, host
+BLOB_HASHES = "blob_hashes"
+# contains blob hases that have been sent to a reflector node
+CLUSTER_BLOBS = "cluster_blobs"
+# contain all SD blob hashes
+SD_BLOB_HASHES = "sd_blob_hashes"
 # each sd_blob_hash is its own table, stores blobs is stream
 # each host is its own table, stores all blob hashes it has
 
