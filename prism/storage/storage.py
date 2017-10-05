@@ -146,6 +146,12 @@ class RedisHelper(object):
         defer.returnValue(was_deleted)
 
     @defer.inlineCallbacks
+    def delete_blob_from_host(self, blob_hash, host):
+        # set blob so that its no longer in a host
+        yield self.db.srem(CLUSTER_BLOBS, blob_hash)
+        yield self.db.srem(host, blob_hash)
+
+    @defer.inlineCallbacks
     def delete_sd_blob(self, blob_hash):
         yield self.srem(SD_BLOB_HASHES, blob_hash)
         yield self.delete(blob_hash)
@@ -298,6 +304,20 @@ class ClusterStorage(object):
         else:
             defer.returnValue(False)
 
+    @defer.inlineCallbacks
+    def delete_blob_from_host(self, blob_hash):
+        exists = yield self.blob_exists(blob_hash)
+        if not exists:
+            raise Exception('blob not found')
+
+        blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
+        if len(host) == 0:# blob is not on a host
+            raise Exception('blob must be on a host for delete_blob_from_host')
+        # this will set host to empty
+        yield self.db.set_blob(blob_hash, blob_length, timestamp)
+        yield self.db.delete_blob_from_host(blob_hash, host)
+
+ 
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
         if not is_valid_blobhash(blob_hash):
