@@ -20,9 +20,12 @@ log = logging.getLogger(__name__)
 conf = get_settings()
 
 # table names
-BLOB_HASHES = "blob_hashes" # contains all blob hashes (including SD blob hashes), value is length
-CLUSTER_BLOBS = "cluster_blobs" # contains blob hases that have been sent to a reflector node
-SD_BLOB_HASHES = 'sd_blob_hashes' # contain all SD blob hashes
+# contains all blob hashes (including SD blob hashes), value is json encoded length, timestamp, host
+BLOB_HASHES = "blob_hashes"
+# contains blob hases that have been sent to a reflector node
+CLUSTER_BLOBS = "cluster_blobs"
+# contain all SD blob hashes
+SD_BLOB_HASHES = "sd_blob_hashes"
 # each sd_blob_hash is its own table, stores blobs is stream
 # each host is its own table, stores all blob hashes it has
 
@@ -141,6 +144,12 @@ class RedisHelper(object):
     def delete_blob(self, blob_hash):
         was_deleted = yield self.hdel(BLOB_HASHES, blob_hash)
         defer.returnValue(was_deleted)
+
+    @defer.inlineCallbacks
+    def delete_blob_from_host(self, blob_hash, host):
+        # set blob so that its no longer in a host
+        yield self.db.srem(CLUSTER_BLOBS, blob_hash)
+        yield self.db.srem(host, blob_hash)
 
     @defer.inlineCallbacks
     def delete_sd_blob(self, blob_hash):
@@ -284,6 +293,8 @@ class ClusterStorage(object):
         exists = yield self.blob_exists(blob_hash)
         if exists:
             blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
+            if len(host) > 0: # blob is on a host
+                raise Exception("Cannot delete blob on a host, use delete_from_host")
             blob = BlobFile(self.db_dir, blob_hash, blob_length)
             yield blob.delete()
             was_deleted = yield self.db.delete_blob(blob_hash)
@@ -295,6 +306,20 @@ class ClusterStorage(object):
         else:
             defer.returnValue(False)
 
+    @defer.inlineCallbacks
+    def delete_blob_from_host(self, blob_hash):
+        exists = yield self.blob_exists(blob_hash)
+        if not exists:
+            raise Exception('blob not found')
+
+        blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
+        if len(host) == 0:# blob is not on a host
+            raise Exception('blob must be on a host for delete_blob_from_host')
+        # this will set host to empty
+        yield self.db.set_blob(blob_hash, blob_length, timestamp)
+        yield self.db.delete_blob_from_host(blob_hash, host)
+
+ 
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
         if not is_valid_blobhash(blob_hash):
