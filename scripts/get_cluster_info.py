@@ -66,6 +66,11 @@ def check_cluster_info():
     storage = ClusterStorage()
     sd_blobs = storage.db.db.smembers(SD_BLOB_HASHES)
     print("Num sd hashes:{}".format(len(sd_blobs)))
+
+    for host in settings['hosts']:
+        count = storage.db.db.scard(host)
+        print("HOST:{}, BLOB Count:{}".format(host, count))
+
     num_blobs = 0
     for sd_blob in sd_blobs:
         blobs = yield storage.db.get_blobs_for_stream(sd_blob)
@@ -80,6 +85,7 @@ def check_cluster_info():
         num_unforwarded_blobs += len(blobs)
     print("Num blobs in unforwarded streams:{}".format(num_unforwarded_blobs))
     reactor.stop()
+
 
 
 if __name__ == '__main__':
