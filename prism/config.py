@@ -34,7 +34,7 @@ def get_settings():
         HOSTS: [
             "jack.lbry.tech",
         ],
-        MAX_BLOBS_PER_HOST: 500000, # assuming 1 terabyte disk / 2 mb blobs
+        MAX_BLOBS_PER_HOST: 490000, # assuming 1 terabyte disk / 2 mb blobs
         BLOB_DIR: os.path.expanduser("~/.prism"),
         REDIS_SERVER: "localhost",
         ENQUEUE_ON_STARTUP: True
