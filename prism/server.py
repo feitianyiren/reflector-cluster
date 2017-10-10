@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from twisted.internet import defer, reactor
 from twisted.application import service
 
@@ -40,9 +41,22 @@ def enqueue_on_start():
         log.info("enqueued stream {}".format(sd_hash))
 
 def main():
-    prism_server = PrismServer()
-    reactor.addSystemEventTrigger("before", "startup", prism_server.startService)
-    reactor.addSystemEventTrigger("before", "shutdown", prism_server.stopService)
-    if settings['enqueue on startup']:
+    """
+    prism-server script
+
+    USAGE:
+    prism-server [--clear_backlog_only]
+
+    Start prism server.
+    If --clear_backlog_only argument is specified, do not run prism server, but clear
+    any backlog of blobs that failed to stream in the prism server.
+    """
+    if len(sys.argv) > 1 and sys.argv[1] == '--clear_backlog_only':
         d = enqueue_on_start()
+    else:
+        prism_server = PrismServer()
+        reactor.addSystemEventTrigger("before", "startup", prism_server.startService)
+        reactor.addSystemEventTrigger("before", "shutdown", prism_server.stopService)
+        if settings['enqueue on startup']:
+            d = enqueue_on_start()
     reactor.run()
