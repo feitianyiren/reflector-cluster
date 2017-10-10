@@ -50,7 +50,10 @@ class PrismClientFactory(ClientFactory):
         #this deferred is fired when this protocol is disconnected
         #(when connectionLost() is called)
         self.on_connection_lost_d = defer.Deferred()
+        self.on_connection_fail_d = defer.Deferred()
 
+    def clientConnectionFailed(self, connector, reason):
+        self.on_connection_fail_d.callback(reason)
 
     def buildProtocol(self, addr):
         p = self.protocol()
@@ -75,7 +78,10 @@ class PrismStreamClientFactory(ClientFactory):
         #this deferred is fired when this protocol is disconnected
         #(when connectionLost() is called)
         self.on_connection_lost_d = defer.Deferred()
+        self.on_connection_fail_d = defer.Deferred()
 
+    def clientConnectionFailed(self, connector, reason):
+        self.on_connection_fail_d.callback(reason)
 
     def buildProtocol(self, addr):
         p = self.protocol(self.sd_blob, self.blobs)
