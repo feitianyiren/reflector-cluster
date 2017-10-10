@@ -20,6 +20,7 @@ REDIS_ADDRESS = settings['redis server']
 SETTINGS = get_settings()
 HOSTS = SETTINGS['hosts']
 NUM_HOSTS = len(HOSTS) - 1
+TCP_CONNECT_TIMEOUT = 15
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
 
     factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
     try:
-        connection = reactor.connectTCP(host, port, factory)
+        connection = reactor.connectTCP(host, port, factory, timeout=TCP_CONNECT_TIMEOUT)
     except JobTimeoutException:
         log.error("Failed to forward %s --> %s", hash_to_process[:8], host)
         return sys.exit(0)
