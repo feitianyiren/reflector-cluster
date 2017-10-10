@@ -83,8 +83,8 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         connection.disconnect()
         reactor.fireSystemEvent("shutdown")
 
-    def on_connection_fail(reason):
-        log.error("Failed to connect to %s:%s. Reason: %s", host, port, reason)
+    def on_connection_fail(result):
+        log.error("Failed to connect to %s:%s", host, port)
         reactor.fireSystemEvent("shutdown")
 
     factory.on_connection_lost_d.addCallbacks(on_finish, on_error)

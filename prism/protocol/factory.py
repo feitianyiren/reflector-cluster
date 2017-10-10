@@ -54,7 +54,7 @@ class PrismClientFactory(ClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         log.info('Connection failed: %s', reason)
-        self.on_connection_fail_d.callback(reason)
+        self.on_connection_fail_d.callback(None)
 
     def buildProtocol(self, addr):
         p = self.protocol()
