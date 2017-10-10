@@ -86,6 +86,7 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
 
     factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
     try:
+        log.debug("Connecting factory to %s:%s", host, port)
         connection = reactor.connectTCP(host, port, factory, timeout=TCP_CONNECT_TIMEOUT)
     except JobTimeoutException:
         log.error("Failed to forward %s --> %s", hash_to_process[:8], host)

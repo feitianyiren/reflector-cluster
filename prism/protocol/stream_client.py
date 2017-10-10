@@ -24,6 +24,7 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
 
 
     def connectionMade(self):
+        log.debug("Connection made")
         self.response_buff = ''
         self.outgoing_buff = ''
         self.next_blob_to_send = None
