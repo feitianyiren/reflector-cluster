@@ -53,7 +53,7 @@ class PrismClientFactory(ClientFactory):
         self.on_connection_fail_d = defer.Deferred()
 
     def clientConnectionFailed(self, connector, reason):
-        log.info('Connection failed: %s', reason)
+        log.error('Connection failed: %s', reason)
         self.on_connection_fail_d.callback(None)
 
     def buildProtocol(self, addr):
@@ -82,8 +82,8 @@ class PrismStreamClientFactory(ClientFactory):
         self.on_connection_fail_d = defer.Deferred()
 
     def clientConnectionFailed(self, connector, reason):
-        log.info('Connection failed: %s', reason)
-        self.on_connection_fail_d.callback(reason)
+        log.error('Connection failed: %s', reason)
+        self.on_connection_fail_d.callback(None)
 
     def buildProtocol(self, addr):
         p = self.protocol(self.sd_blob, self.blobs)
