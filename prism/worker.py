@@ -5,7 +5,6 @@ from prism.config import get_settings
 
 settings = get_settings()
 
-
 def main():
     with Connection(Redis(settings['redis server'])):
         qs = ['default']

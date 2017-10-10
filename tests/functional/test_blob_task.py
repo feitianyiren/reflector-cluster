@@ -1,6 +1,7 @@
 from prism.protocol.task import  process_blob, get_blob_path
 from prism.protocol.factory import build_prism_blob_client_factory
 from prism.storage.storage import ClusterStorage
+from prism.config import init_log
 
 from lbrynet.blob.blob_file import BlobFile
 from twisted.internet import defer, task
@@ -14,14 +15,12 @@ import time
 import multiprocessing
 import threading
 import Queue
-
-# this turns on logging
-from twisted.python import log
 import sys
-log.startLogging(sys.stdout)
+
+from test_utils import setup_server, SD_BLOB_HASH, SD_BLOB_CONTENT, BLOB_HASH, BLOB_CONTENT
 
 sys.path.insert(0, os.path.dirname(__file__))
-from test_utils import setup_server, SD_BLOB_HASH, SD_BLOB_CONTENT, BLOB_HASH, BLOB_CONTENT
+init_log(verbose=False)
 
 class TestTask(unittest.TestCase):
 
