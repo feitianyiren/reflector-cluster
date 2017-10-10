@@ -1,8 +1,28 @@
 import os
 import yaml
+import logging
+from logging.handlers import RotatingFileHandler
+
+def init_log(verbose=True):
+    log = logging.getLogger()
+    h = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
+    h.setFormatter(formatter)
+    log.addHandler(h)
+    file_h = RotatingFileHandler(os.path.expanduser("~/prism-server.log"))
+    file_h.setFormatter(formatter)
+    log.addHandler(file_h)
+    if verbose:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+    log.setLevel(log_level)
 
 
 def get_settings():
+    # initialize settings from .prism.yml
+    # and create root logger
+
     conf_path = os.path.expanduser("~/.prism.yml")
 
     if os.path.isfile(conf_path):
@@ -18,6 +38,7 @@ def get_settings():
     WORKERS = "workers"
     REDIS_SERVER = "redis server"
     ENQUEUE_ON_STARTUP = "enqueue on startup"
+    VERBOSE = "verbose"
 
     settings_types = {
         LISTEN_ON: str,
@@ -26,7 +47,8 @@ def get_settings():
         BLOB_DIR: str,
         WORKERS: int,
         REDIS_SERVER: str,
-        ENQUEUE_ON_STARTUP: bool
+        ENQUEUE_ON_STARTUP: bool,
+        VERBOSE: bool,
     }
 
     default_conf = {
@@ -37,7 +59,8 @@ def get_settings():
         MAX_BLOBS_PER_HOST: 490000, # assuming 1 terabyte disk / 2 mb blobs
         BLOB_DIR: os.path.expanduser("~/.prism"),
         REDIS_SERVER: "localhost",
-        ENQUEUE_ON_STARTUP: True
+        ENQUEUE_ON_STARTUP: True,
+        VERBOSE: False,
     }
 
     settings = {}
@@ -47,4 +70,10 @@ def get_settings():
             settings[k] = conf_file_data[k]
         else:
             settings[k] = default_conf[k]
+
+    init_log(settings['verbose'])
+
     return settings
+
+
+

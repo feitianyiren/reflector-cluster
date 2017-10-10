@@ -9,9 +9,8 @@ from prism.protocol.task import enqueue_stream
 from prism.storage.storage import ClusterStorage
 from prism.config import get_settings
 
-log = logging.getLogger(__name__)
-
 settings = get_settings()
+log = logging.getLogger(__name__)
 
 LISTEN_ON = settings['listen']
 
