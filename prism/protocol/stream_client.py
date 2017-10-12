@@ -155,8 +155,8 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
                 if response_dict['received_sd_blob']:
                     log.info("Sent reflector descriptor %s", self.next_blob_to_send)
                 else:
-                    log.warning("Reflector failed to receive descriptor %s for %s",
-                                self.next_blob_to_send, self.name)
+                    log.warning("Reflector failed to receive descriptor %s for",
+                                self.next_blob_to_send)
                     self.blobs_to_send.append(self.next_blob_to_send)
                 return self.set_not_uploading()
 
