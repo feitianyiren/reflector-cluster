@@ -87,7 +87,13 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         log.error("Failed to connect to %s:%s", host, port)
         reactor.fireSystemEvent("shutdown")
 
+    def _error(failure):
+        log.error("Failed on_connection_lost_d callback: %s", failure)
+        reactor.fireSystemEvent("shutdown")
+
     factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
+    factory.on_connection_lost_d.addErrback(_error)
+
     factory.on_connection_fail_d.addCallback(on_connection_fail)
     try:
         log.debug("Connecting factory to %s:%s", host, port)
