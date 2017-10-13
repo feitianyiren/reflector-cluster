@@ -5,18 +5,19 @@ from logging.handlers import RotatingFileHandler
 
 def init_log(verbose=True):
     log = logging.getLogger()
-    h = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
-    h.setFormatter(formatter)
-    log.addHandler(h)
-    file_h = RotatingFileHandler(os.path.expanduser("~/prism-server.log"))
-    file_h.setFormatter(formatter)
-    log.addHandler(file_h)
-    if verbose:
-        log_level = logging.DEBUG
-    else:
-        log_level = logging.INFO
-    log.setLevel(log_level)
+    if not len(log.handlers):
+        h = logging.StreamHandler()
+        formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
+        h.setFormatter(formatter)
+        log.addHandler(h)
+        file_h = RotatingFileHandler(os.path.expanduser("~/prism-server.log"))
+        file_h.setFormatter(formatter)
+        log.addHandler(file_h)
+        if verbose:
+            log_level = logging.DEBUG
+        else:
+            log_level = logging.INFO
+        log.setLevel(log_level)
 
 
 def get_settings():
