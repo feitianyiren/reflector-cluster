@@ -2,11 +2,12 @@ import os
 import logging
 from twisted.internet import defer, reactor
 from twisted.application import service
+from rq import Queue
 
 from prism.protocol.factory import build_prism_stream_server_factory
 from prism.protocol.factory import build_prism_stream_client_factory
 from prism.protocol.task import enqueue_stream
-from prism.storage.storage import ClusterStorage
+from prism.storage.storage import ClusterStorage, get_redis_connection
 from prism.config import get_settings
 
 settings = get_settings()
@@ -40,9 +41,17 @@ def enqueue_on_start():
         log.info("enqueued stream {}".format(sd_hash))
 
 def main():
+    # clear the failed task queue
+    redis_connection = get_redis_connection(settings['redis server'])
+    qfail = Queue("failed", connection=redis_connection)
+    qfail.empty()
+
+    # start up server
     prism_server = PrismServer()
     reactor.addSystemEventTrigger("before", "startup", prism_server.startService)
     reactor.addSystemEventTrigger("before", "shutdown", prism_server.stopService)
+
+    # attempt to redistribute any local blobs
     if settings['enqueue on startup']:
         d = enqueue_on_start()
     reactor.run()
