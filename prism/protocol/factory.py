@@ -107,10 +107,10 @@ def build_prism_stream_server_factory(blob_storage):
     @defer.inlineCallbacks
     def task_after_completed_blob(blob_hash, sd_hash):
         if sd_hash is not None:
-            log.info("checking sd_hash %s",sd_hash)
             needed = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
+            log.info("needed blobs for %s: %s", sd_hash, needed)
             if not needed:
-                log.info("enqueuing stream")
+                log.info("enqueuing stream %s", sd_hash)
                 blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
                 total_blobs = len(blobs)
                 enqueue_stream(sd_hash, total_blobs, blob_storage.db_dir, build_prism_stream_client_factory)
