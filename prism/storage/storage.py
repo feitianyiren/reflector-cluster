@@ -29,6 +29,8 @@ SD_BLOB_HASHES = "sd_blob_hashes"
 # each sd_blob_hash is its own table, stores blobs is stream
 # each host is its own table, stores all blob hashes it has
 
+
+
 # set of node addresses
 CLUSTER_NODE_ADDRESSES = conf['hosts']
 MAX_BLOBS_PER_HOST = conf['max blobs']
@@ -148,8 +150,8 @@ class RedisHelper(object):
     @defer.inlineCallbacks
     def delete_blob_from_host(self, blob_hash, host):
         # set blob so that its no longer in a host
-        yield self.db.srem(CLUSTER_BLOBS, blob_hash)
-        yield self.db.srem(host, blob_hash)
+        yield self.srem(CLUSTER_BLOBS, blob_hash)
+        yield self.srem(host, blob_hash)
 
     @defer.inlineCallbacks
     def delete_sd_blob(self, blob_hash):
@@ -319,7 +321,7 @@ class ClusterStorage(object):
         yield self.db.set_blob(blob_hash, blob_length, timestamp)
         yield self.db.delete_blob_from_host(blob_hash, host)
 
- 
+
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
         if not is_valid_blobhash(blob_hash):
