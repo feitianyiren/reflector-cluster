@@ -33,11 +33,10 @@ log = logging.getLogger(__name__)
 
 class ReflectorServerProtocol(Protocol, TimeoutMixin):
     PROTOCOL_TIMEOUT = 30
-    def __init__(self, blob_storage, task_after_completed_blob=None):
+    def __init__(self, blob_storage, task_after_completed_conn=None):
         self.blob_storage = blob_storage
-        # this is a function that is scheduled whenever we've received a blob
-        # it takes sd_hash, and blob_hash as arguments
-        self.task_after_completed_blob = task_after_completed_blob
+        # this is a function that runs when the connection is lost
+        self.task_after_completed_conn = task_after_completed_conn
 
 
     def connectionMade(self):
@@ -62,6 +61,8 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
         self.setTimeout(None)
         log.info("Connection lost to %s: %s", self.peer.host, reason)
+        if self.task_after_completed_conn is not None:
+            self.task_after_completed_conn(self.sd_hash_receiving_stream)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
@@ -93,8 +94,6 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         self.close_blob()
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
-        if self.task_after_completed_blob is not None:
-            reactor.callLater(0, self.task_after_completed_blob, blob_hash, self.sd_hash_receiving_stream)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):

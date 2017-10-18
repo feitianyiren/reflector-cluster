@@ -22,13 +22,13 @@ class PrismServerFactory(ServerFactory):
 
     protocol = ReflectorServerProtocol
 
-    def __init__(self, storage, task_after_completed_blob=None):
+    def __init__(self, storage, task_after_completed_conn=None):
         self.storage = storage
         self.protocol_version = 1
-        self.task_after_completed_blob = task_after_completed_blob
+        self.task_after_completed_conn = task_after_completed_conn
 
     def buildProtocol(self, addr):
-        p = self.protocol(self.storage, self.task_after_completed_blob)
+        p = self.protocol(self.storage, self.task_after_completed_conn)
         p.factory = self
         p.addr = addr
         self.p = p
@@ -105,7 +105,7 @@ def build_prism_stream_server_factory(blob_storage):
     blob to a host
     """
     @defer.inlineCallbacks
-    def task_after_completed_blob(blob_hash, sd_hash):
+    def task_after_completed_conn(sd_hash):
         if sd_hash is not None:
             needed = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
             log.info("needed blobs for %s: %s", sd_hash, needed)
@@ -114,10 +114,8 @@ def build_prism_stream_server_factory(blob_storage):
                 blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
                 total_blobs = len(blobs)
                 enqueue_stream(sd_hash, total_blobs, blob_storage.db_dir, build_prism_stream_client_factory)
-        else:
-            enqueue_blob(blob_hash, blob_storage.db_dir, build_prism_blob_client_factory)
 
-    return PrismServerFactory(blob_storage, task_after_completed_blob)
+    return PrismServerFactory(blob_storage, task_after_completed_conn)
 
 @defer.inlineCallbacks
 def build_prism_stream_client_factory(sd_hash, blob_storage):
