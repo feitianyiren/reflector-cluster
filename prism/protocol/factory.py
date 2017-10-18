@@ -107,9 +107,12 @@ def build_prism_stream_server_factory(blob_storage):
     @defer.inlineCallbacks
     def task_after_completed_conn(sd_hash):
         if sd_hash is not None:
-            needed = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
+            forwarded = yield blob_storage.blob_has_been_forwarded_to_host(sd_hash)
+            needed_blobs = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
             log.info("needed blobs for %s: %s", sd_hash, needed)
-            if not needed:
+            if not needed_blobs and not forwarded:
+                # enqueue stream if there is no more needed blobs and
+                # it has not been forwarded
                 log.info("enqueuing stream %s", sd_hash)
                 blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
                 total_blobs = len(blobs)
