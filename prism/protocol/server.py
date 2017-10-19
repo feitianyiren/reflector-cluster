@@ -63,7 +63,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         log.info("Connection lost to %s: %s, task:%s", self.peer.host, reason, self.task_after_completed_conn)
         if self.task_after_completed_conn is not None:
             log.info("running task for sd hash %s, peer %s", self.sd_hash_receiving_stream, self.peer.host)
-            self.task_after_completed_conn(self.sd_hash_receiving_stream)
+            self.callLater(0, self.task_after_completed_conn, self.sd_hash_receiving_stream)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
