@@ -16,7 +16,7 @@ from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB
 from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
 from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
 from prism.error import ReflectorClientVersionError
-from prism.protocol.task import enqueue_blob, enqueue_stream
+from prism.protocol.task import enqueue_stream
 from prism.config import get_settings
 
 
@@ -33,12 +33,9 @@ log = logging.getLogger(__name__)
 
 class ReflectorServerProtocol(Protocol, TimeoutMixin):
     PROTOCOL_TIMEOUT = 30
-    def __init__(self, blob_storage, task_after_completed_blob=None):
+    def __init__(self, blob_storage, stream_client_factory):
         self.blob_storage = blob_storage
-        # this is a function that is scheduled whenever we've received a blob
-        # it takes sd_hash, and blob_hash as arguments
-        self.task_after_completed_blob = task_after_completed_blob
-
+        self.stream_client_factory = stream_client_factory
 
     def connectionMade(self):
         peer_info = self.transport.getPeer()
@@ -55,6 +52,9 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         self.blob_writer = None
         self.blob_finished_d = None
         self.request_buff = ""
+        # If a stream has been enqueued to be sent to host, set it to
+        # True, so it does not somehow get enqueued more than once
+        self.enqueued_stream = False
         # needed for TimeoutMixin
         self.callLater = reactor.callLater
         self.setTimeout(self.PROTOCOL_TIMEOUT)
@@ -93,8 +93,22 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         self.close_blob()
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
-        if self.task_after_completed_blob is not None:
-            reactor.callLater(0, self.task_after_completed_blob, blob_hash, self.sd_hash_receiving_stream)
+
+        # Enqueue stream if we finished getting all blobs.
+        # Make sure we haven't forwarded it already or we haven't
+        # called enqueue_stream already. This can happen since
+        # there is no lock on a stream and simultaneous calls
+        # to enqueue_stream can occur.
+        # TODO: create lock on stream so simultaneous calls to
+        # enqueue_stream on the same stream can't occur
+        needed_blobs = yield self.blob_storage.get_needed_blobs_for_stream(self.sd_hash_receiving_stream)
+        forwarded = yield self.blob_storage.blob_has_been_forwarded_to_host(self.sd_hash_receiving_stream)
+        if not needed_blobs and not forwarded and not self.enqueued_stream:
+            log.info("enqueuing stream %s", self.sd_hash_receiving_stream)
+            blobs = yield self.blob_storage.get_blobs_for_stream(self.sd_hash_receiving_stream)
+            total_blobs = len(blobs)
+            self.enqueued_stream = True
+            enqueue_stream(self.sd_hash_receiving_stream, total_blobs, self.blob_storage.db_dir, self.stream_client_factory)
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
