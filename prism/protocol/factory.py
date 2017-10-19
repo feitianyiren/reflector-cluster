@@ -22,13 +22,12 @@ class PrismServerFactory(ServerFactory):
 
     protocol = ReflectorServerProtocol
 
-    def __init__(self, storage, task_after_completed_blob=None):
+    def __init__(self, storage):
         self.storage = storage
         self.protocol_version = 1
-        self.task_after_completed_blob = task_after_completed_blob
 
     def buildProtocol(self, addr):
-        p = self.protocol(self.storage, self.task_after_completed_blob)
+        p = self.protocol(self.storage, build_prism_stream_client_factory)
         p.factory = self
         p.addr = addr
         self.p = p
@@ -95,29 +94,7 @@ class PrismStreamClientFactory(ClientFactory):
 
 
 def build_prism_stream_server_factory(blob_storage):
-    """
-    Build a prism sever factory for working with streams
-    When a blob is completed, and it is part of a stream,
-    it will check if we have the complete blobs for the stream
-    and will send this stream to hosts.
-
-    If a blob is not part of a stream, it will send this singular
-    blob to a host
-    """
-    @defer.inlineCallbacks
-    def task_after_completed_blob(blob_hash, sd_hash):
-        if sd_hash is not None:
-            needed = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
-            log.info("needed blobs for %s: %s", sd_hash, needed)
-            if not needed:
-                log.info("enqueuing stream %s", sd_hash)
-                blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
-                total_blobs = len(blobs)
-                enqueue_stream(sd_hash, total_blobs, blob_storage.db_dir, build_prism_stream_client_factory)
-        else:
-            enqueue_blob(blob_hash, blob_storage.db_dir, build_prism_blob_client_factory)
-
-    return PrismServerFactory(blob_storage, task_after_completed_blob)
+    return PrismServerFactory(blob_storage)
 
 @defer.inlineCallbacks
 def build_prism_stream_client_factory(sd_hash, blob_storage):
