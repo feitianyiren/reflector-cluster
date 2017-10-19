@@ -109,7 +109,7 @@ def build_prism_stream_server_factory(blob_storage):
         if sd_hash is not None:
             forwarded = yield blob_storage.blob_has_been_forwarded_to_host(sd_hash)
             needed_blobs = yield blob_storage.get_needed_blobs_for_stream(sd_hash)
-            log.info("needed blobs for %s: %s", sd_hash, needed)
+            log.info("forwarded :%s, needed blobs for %s: %s", forwarded, sd_hash, needed)
             if not needed_blobs and not forwarded:
                 # enqueue stream if there is no more needed blobs and
                 # it has not been forwarded
