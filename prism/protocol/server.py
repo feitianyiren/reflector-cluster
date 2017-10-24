@@ -121,6 +121,10 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
     def enqueue(self):
         d = defer.DeferredList(self.blob_finished_ds)
+        # It's possible that protocol finished in the middle
+        # of writing a blob, in such case the finished_deferred
+        # for the blob may not fire
+        d.addTimeout(60, reactor)
         d.addCallback(self._enqueue)
 
     @defer.inlineCallbacks
