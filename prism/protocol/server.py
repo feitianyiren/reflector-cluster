@@ -59,6 +59,10 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         self.callLater = reactor.callLater
         self.setTimeout(self.PROTOCOL_TIMEOUT)
 
+        # make sure that enqueue_stream can't be called more than once
+        self.enqueue_lock = defer.DeferredLock()
+
+
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
         self.setTimeout(None)
         log.info("Connection lost to %s: %s", self.peer.host, reason)
@@ -94,10 +98,12 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         yield self.send_response({response_key: True})
         log.info("Received %s from %s", blob, self.peer.host)
 
+    @defer.inlineCallbacks
+    def _enqueue(self):
         # Enqueue stream if we finished getting all blobs.
         # Make sure we haven't forwarded it already or we haven't
         # called enqueue_stream already. This can happen since
-        # there is no lock on a stream and simultaneous calls
+        # there is no lock on a specific stream and simultaneous calls
         # to enqueue_stream can occur.
         # TODO: create lock on stream so simultaneous calls to
         # enqueue_stream on the same stream can't occur
@@ -124,9 +130,12 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         response_key will either be received_blob or received_sd_blob
         """
         blob = self.incoming_blob
+        # makes sure _enqueue can't be called simultaneously
+        enqueue = self.enqueue_lock.run(self._enqueue)
 
         self.blob_writer, self.blob_finished_d  = blob.open_for_writing(self.peer)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
+        self.blob_finished_d.addCallback(lambda _: self.enqueue_lock.run(self._enqueue))
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
 
     def close_blob(self):
