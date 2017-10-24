@@ -329,3 +329,21 @@ class ClusterStorage(object):
         timestamp = time.time()
         was_set = yield self.db.set_blob(blob_hash, blob_length, timestamp)
         defer.returnValue(was_set)
+
+    @defer.inlineCallbacks
+    def verify_stream_ready_to_forward(self, sd_hash):
+        blob_exists = yield self.blob_exists(sd_hash)
+        if not blob_exists:
+            defer.returnValue(False)
+
+        blob_forwarded = yield self.blob_has_been_forwarded_to_host(sd_hash)
+        if blob_forwarded:
+            defer.returnValue(False)
+        sd_blob = yield self.get_blob(sd_hash)
+        if not sd_blob.verified:
+            defer.returnValue(False)
+        blobs = yield self.get_blobs_for_stream(sd_hash)
+        for b in blobs:
+            if not b.verified:
+                defer.returnValue(False)
+        defer.returnValue(True)

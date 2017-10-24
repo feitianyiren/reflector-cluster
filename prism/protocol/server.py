@@ -107,13 +107,13 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         # to enqueue_stream can occur.
         # TODO: create lock on stream so simultaneous calls to
         # enqueue_stream on the same stream can't occur
-        needed_blobs = yield self.blob_storage.get_needed_blobs_for_stream(self.sd_hash_receiving_stream)
-        forwarded = yield self.blob_storage.blob_has_been_forwarded_to_host(self.sd_hash_receiving_stream)
-        if not needed_blobs and not forwarded and not self.enqueued_stream:
+        ready = yield self.blob_storage.verify_stream_ready_to_forward(self.sd_hash_receiving_stream)
+        if ready and not self.enqueued_stream:
             log.info("enqueuing stream %s", self.sd_hash_receiving_stream)
             blobs = yield self.blob_storage.get_blobs_for_stream(self.sd_hash_receiving_stream)
             total_blobs = len(blobs)
             self.enqueued_stream = True
+            yield self.stream_client_factory
             enqueue_stream(self.sd_hash_receiving_stream, total_blobs, self.blob_storage.db_dir, self.stream_client_factory)
 
     @defer.inlineCallbacks
