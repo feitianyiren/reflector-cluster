@@ -141,6 +141,7 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
             if 'send_sd_blob' not in response_dict:
                 raise ReflectorRequestError("I don't know whether to send the sd blob or not!")
             if response_dict['send_sd_blob'] is True:
+                self.open_blob_for_reading(self.sd_blob)
                 self.file_sender = FileSender()
             else:
                 self.received_descriptor_response = True
@@ -215,7 +216,6 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
 
         elif not self.sent_stream_info:
             log.debug('Sending the sd hash')
-            self.open_blob_for_reading(self.sd_blob)
             self.send_descriptor_info()
             return defer.succeed(True)
 
