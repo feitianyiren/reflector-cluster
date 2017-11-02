@@ -143,7 +143,7 @@ def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_in
         d = setup_d()
     else:
         d = defer.succeed(True)
-    d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage))
+    d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage, host))
     d.addErrback(factory_setup_error)
     d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, sd_hash))
     reactor.run()
