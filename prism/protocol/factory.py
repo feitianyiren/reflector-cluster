@@ -113,10 +113,10 @@ def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
     sd_blob = yield blob_storage.get_blob(sd_hash)
     if blob_forwarded:
         # if sd blob has already been forwarded to some other host,
-        # raise exception 
+        # raise exception
         sd_hash_host = yield blob_storage.get_blob_host(sd_hash)
         if host_to_send !=  sd_hash_host:
-            raise Exception("sd blob has been forwarded to some other host:%s", sd_hash_host)     
+            raise Exception("sd blob has been forwarded to some other host:%s", sd_hash_host)
     else:
         # if sd blob hasn't been forwarded make sure we have it
         if not sd_blob.verified:
@@ -125,7 +125,7 @@ def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
     blobs = yield blob_storage.get_blobs_for_stream(sd_hash)
     for b in blobs:
         blob_forwarded = yield blob_storage.blob_has_been_forwarded_to_host(b.blob_hash)
-        if blob_forwarded: 
+        if blob_forwarded:
             # if blob has been forwarded, make sure its not on some other host
             blob_host = yield blob_storage.get_blob_host(b.blob_hash)
             if host_to_send != blob_host:
@@ -134,6 +134,11 @@ def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
             # if blob is not forwarded, make sure we have it
             if not b.verified:
                 raise Exception("blob %s is not verified", b.blob_hash)
+
+    host_count = yield blob_storage.get_host_count(host_to_send)
+    if host_count + len(blobs)+1 > settings['max blobs']:
+        raise Exception("Host %s will exceed max blobs", host_to_send)
+
     defer.returnValue(PrismStreamClientFactory(blob_storage, sd_blob, blobs))
 
 @defer.inlineCallbacks

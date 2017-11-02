@@ -82,6 +82,9 @@ class RedisHelper(object):
     def sdiff(self, name, *values):
         return self.defer_func(self.db.sdiff, name, *values)
 
+    def scard(self, name):
+        return self.defer_func(self.db.scard, name)
+
     @defer.inlineCallbacks
     def is_sd_blob(self, blob_hash):
         out = yield self.sismember(SD_BLOB_HASHES, blob_hash)
@@ -155,6 +158,12 @@ class RedisHelper(object):
     def delete_sd_blob(self, blob_hash):
         yield self.srem(SD_BLOB_HASHES, blob_hash)
         yield self.delete(blob_hash)
+
+    @defer.inlineCallbacks
+    def get_host_count(self, host):
+        # get number of blobs on host
+        count = yield self.scard(host)
+        defer.returnValue(count)
 
 class ClusterStorage(object):
     def __init__(self, path=None, redis_address=None):
@@ -345,3 +354,10 @@ class ClusterStorage(object):
             if not b.verified:
                 defer.returnValue(False)
         defer.returnValue(True)
+
+    @defer.inlineCallbacks
+    def get_host_count(self, host):
+        count = yield self.db.get_host_count(host)
+        defer.returnValue(count)
+
+
