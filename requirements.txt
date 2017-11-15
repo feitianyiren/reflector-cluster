@@ -5,4 +5,4 @@ pyyaml==3.12
 psutil==5.2.2
 git+https://github.com/lbryio/lbryschema.git@v0.0.12rc1#egg=lbryschema
 git+https://github.com/lbryio/lbryum.git@v3.1.9rc2#egg=lbryum
-git+https://github.com/lbryio/lbry.git@v0.17.0rc7#egg=lbrynet
+git+https://github.com/lbryio/lbry.git@v0.18.1rc8#egg=lbrynet
