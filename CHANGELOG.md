@@ -20,7 +20,7 @@ labeled as 2.7.1. Subsequent releases will follow
   *
 
 ### Changed
-  *
+  * Added reflector-cluster repo to `release-tool`
   *
 
 ### Added
