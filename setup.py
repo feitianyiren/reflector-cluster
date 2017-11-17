@@ -8,8 +8,8 @@ requires = [
     'rq==0.8.0',
     'pyyaml==3.12',
     'psutil==5.2.2',
-    'lbryschema==0.0.15rc1',
-    'lbryum==3.1.12rc5',
+    'lbryschema==0.0.15rc2',
+    'lbryum==3.1.12rc6',
     'lbrynet==0.18.1rc10',
 ]
 console_scripts = [
