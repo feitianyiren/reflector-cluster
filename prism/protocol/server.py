@@ -63,7 +63,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
     def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
         self.setTimeout(None)
-        log.info("Connection lost to %s: %s", self.peer.host, reason)
+        log.debug("Connection lost to %s: %s", self.peer.host, reason)
         self.enqueue()
 
     def handle_error(self, err):
