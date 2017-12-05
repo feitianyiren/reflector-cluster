@@ -7,4 +7,4 @@ except error.ReactorAlreadyInstalledError:
         print "Failed to install SelectReactor because %s is already installed" % \
               reactor.__class__.__name__
 
-__version__ = "0.0.2rc11"
+__version__ = "0.0.2rc12"
