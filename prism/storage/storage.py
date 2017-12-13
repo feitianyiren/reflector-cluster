@@ -28,7 +28,6 @@ SD_BLOB_HASHES = "sd_blob_hashes"
 # each host is its own table, stores all blob hashes it has
 
 
-
 # set of node addresses
 CLUSTER_NODE_ADDRESSES = conf['hosts']
 MAX_BLOBS_PER_HOST = conf['max blobs']
@@ -84,6 +83,9 @@ class RedisHelper(object):
 
     def scard(self, name):
         return self.defer_func(self.db.scard, name)
+
+    def sinter(self, name1, name2):
+        return self.defer_func(self.db.sinter, name1, name2)
 
     @defer.inlineCallbacks
     def is_sd_blob(self, blob_hash):
@@ -164,6 +166,11 @@ class RedisHelper(object):
         # get number of blobs on host
         count = yield self.scard(host)
         defer.returnValue(count)
+
+    @defer.inlineCallbacks
+    def get_host_stream_count(self, host):
+        blobs = yield self.sinter(host, SD_BLOB_HASHES)
+        defer.returnValue(len(blobs))
 
 class ClusterStorage(object):
     def __init__(self, path=None, redis_address=None):
