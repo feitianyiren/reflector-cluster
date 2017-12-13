@@ -1,12 +1,18 @@
 """
-check for info in the cluster
+Log opened.
+usage: get_cluster_info.py [-h] [--host] [var]
 
-USAGE:
-python get_cluster_info.py [blob_hash]
+Get cluster info, if no var is given check cluster info,if var is given treat
+it as blob hash and get blob hash information, if --host flag is used,
+treatvar as host and get host information
 
-RETURNS:
-if blob_hash is specified, return info about the blob,
-otherwise return info about the cluster
+positional arguments:
+  var         blob_hash or host
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --host      use this flag to get host information
+
 """
 
 from prism.storage.storage import ClusterStorage, SD_BLOB_HASHES
@@ -16,10 +22,12 @@ from twisted.internet import reactor,defer
 import sys
 import datetime
 import json
+import argparse
 
 # this turns on logging
 from twisted.python import log
 import sys
+
 log.startLogging(sys.stdout)
 
 settings = get_settings()
@@ -31,7 +39,7 @@ def check_blob_hash(blob_hash):
     if not blob_exists:
         print("Blob does not exist in cluster")
         reactor.stop()
-    
+
     host = yield storage.get_blob_host(blob_hash)
     timestamp = yield storage.get_blob_timestamp(blob_hash)
     length, _, _= yield storage.db.get_blob(blob_hash)
@@ -42,23 +50,38 @@ def check_blob_hash(blob_hash):
     is_sd_blob = yield storage.is_sd_blob(blob_hash)
     if is_sd_blob:
         print("Blob is an SD blob")
+        blob_in_stream_not_found = 0
+        blob_in_stream_at_diff_host = 0
         # check if its blobs has been forwarded properly to hosts
         blobs = yield storage.db.get_blobs_for_stream(blob_hash)
         print("{} blobs in stream".format(len(blobs)))
         for blob in blobs:
             blob_exists = yield storage.blob_exists(blob)
             if not blob_exists:
+                blob_in_stream_not_found +=1
                 print("found a blob in stream that does not exist in cluster:{}".format(blob))
                 continue
             blob_host = yield storage.get_blob_host(blob)
             if blob_host != host:
                 print("found a blob in stream that is in a different host:{}".format(blob_host))
+                blob_in_stream_at_diff_host = 0
             if len(host) == 0:# if not on host check
                 blob = yield storage.get_blob(blob)
                 if not blob.verified:
                     print("found unverified blob on host:{}".format(blob))
+        print("Num nlobs in stream not found:{}".format(blob_in_stream_not_found))
+        print("Num blobs in stream at different host:{}".format(blob_in_stream_at_diff_host))
     else:
         print("Blob is not an SD blob")
+    reactor.stop()
+
+@defer.inlineCallbacks
+def check_host_info(host):
+    storage = ClusterStorage()
+    count = yield storage.db.get_host_stream_count(host)
+    print("Num streams on host:{}".format(count))
+    count = yield storage.db.get_host_count(host)
+    print("Num blobs on host:{}".format(count))
     reactor.stop()
 
 @defer.inlineCallbacks
@@ -68,8 +91,9 @@ def check_cluster_info():
     print("Num sd hashes:{}".format(len(sd_blobs)))
 
     for host in settings['hosts']:
-        count = storage.db.db.scard(host)
-        print("HOST:{}, BLOB Count:{}".format(host, count))
+        count = yield storage.db.get_host_count(host)
+        stream_count = yield storage.db.get_host_stream_count(host)
+        print("HOST:{}, BLOB Count:{}, STREAM count:{}".format(host, count, stream_count))
 
     num_blobs = 0
     for sd_blob in sd_blobs:
@@ -89,10 +113,18 @@ def check_cluster_info():
 
 
 if __name__ == '__main__':
-    if len(sys.argv) >1:
-        check_blob_hash(sys.argv[1])
+    parser = argparse.ArgumentParser(description='Get cluster info, if no var is given check cluster info,'
+        'if var is given treat it as blob hash and get blob hash information, if --host flag is used, treat'
+        'var as host and get host information')
+    parser.add_argument('var', help='blob_hash or host', nargs='?')
+    parser.add_argument('--host', action='store_true', help='use this flag to get host information')
+
+    args = parser.parse_args()
+    if args.host and args.var:
+        check_host_info(args.var)
+    elif not args.host and args.var:
+        check_blob_hash(args.var)
     else:
         check_cluster_info()
-
     reactor.run()
 
