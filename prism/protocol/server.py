@@ -66,7 +66,8 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         if not reason or reason.check(error.ConnectionDone):
             self.setTimeout(None)
             self.enqueue()
-        log.warning("connection lost: %s", reason)
+        else:
+            log.warning("connection lost: %s", reason)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
