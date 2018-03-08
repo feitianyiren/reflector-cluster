@@ -1,26 +1,24 @@
-from prism.protocol.task import  process_blob, process_stream, get_blob_path
-from prism.protocol.factory import PrismClientFactory, PrismStreamClientFactory, PrismServerFactory, build_prism_stream_client_factory, build_prism_stream_server_factory
-from prism.storage.storage import ClusterStorage
-from prism.config import init_log
+from twisted.internet import defer
 
-from lbrynet.blob.blob_file import BlobFile
-from twisted.internet import defer, task
-
+# defer.Deferred.debug = True
 import unittest
 import shutil
 import tempfile
-import fakeredis
 import os
-import time
 import multiprocessing
-import threading
-import Queue
 import sys
 
+from lbrynet.blob.blob_file import BlobFile
+
+from prism.protocol.task import process_stream, get_blob_path
+from prism.protocol.factory import build_prism_stream_client_factory
+from prism.storage.storage import ClusterStorage
+from prism.config import init_log
 from test_utils import setup_server, SD_BLOB_HASH, SD_BLOB_CONTENT, BLOB_HASH, BLOB_CONTENT
 
 sys.path.insert(0, os.path.dirname(__file__))
-init_log(verbose=False)
+init_log(verbose=True)
+
 
 class TestTask(unittest.TestCase):
 
@@ -103,6 +101,7 @@ class TestTask(unittest.TestCase):
         self.assertEqual(1, server_results[0]['blob_exists'])
         self.assertEqual(BLOB_CONTENT, server_results[1]['blob_content'])
         self.assertEqual(1, server_results[1]['blob_exists'])
+
 
 if __name__ == '__main__':
     unittest.run()

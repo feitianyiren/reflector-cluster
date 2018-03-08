@@ -4,7 +4,6 @@ import time
 import logging
 import random
 
-from redis import Redis
 from rq import Queue
 from redis.exceptions import ConnectionError
 from rq.timeouts import JobTimeoutException
@@ -137,7 +136,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
 
 
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
-    log.debug("processing stream pid %s", os.getpid())
+    log.info("processing stream pid %s", os.getpid())
     if host_infos is None:
         host, port, host_blob_count = next_host(get_redis_connection(redis_address))
     else:
