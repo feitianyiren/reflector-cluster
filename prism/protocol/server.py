@@ -79,13 +79,12 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
     def clean_up_failed_upload(self, err, blob):
         if err.check(ConnectionDone):
-            return
+            return defer.succeed(None)
         elif err.check(DownloadCanceledError):
             log.warning("Failed to receive %s", blob)
-            return self.blob_storage.delete(blob.blob_hash)
         else:
             log.exception(err)
-            return self.blob_storage.delete(blob.blob_hash)
+        return self.blob_storage.delete(blob.blob_hash)
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
