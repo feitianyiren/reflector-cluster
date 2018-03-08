@@ -5,7 +5,6 @@ import logging
 
 from twisted.internet import defer, error, reactor
 from twisted.internet.protocol import Protocol
-from twisted.python import failure
 from twisted.internet.error import ConnectionDone
 from twisted.protocols.policies import TimeoutMixin
 
@@ -33,6 +32,7 @@ log = logging.getLogger(__name__)
 
 class ReflectorServerProtocol(Protocol, TimeoutMixin):
     PROTOCOL_TIMEOUT = 30
+
     def __init__(self, blob_storage, stream_client_factory):
         self.blob_storage = blob_storage
         self.stream_client_factory = stream_client_factory
@@ -61,10 +61,12 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
         self.blob_finished_ds = []
 
-    def connectionLost(self, reason=failure.Failure(error.ConnectionDone())):
-        self.setTimeout(None)
+    def connectionLost(self, reason=None):
         log.debug("Connection lost to %s: %s", self.peer.host, reason)
-        self.enqueue()
+        if not reason or reason.check(error.ConnectionDone):
+            self.setTimeout(None)
+            self.enqueue()
+        log.warning("connection lost: %s", reason)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
@@ -88,7 +90,6 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
-        blob_hash = blob.blob_hash
         yield self.blob_storage.completed(blob.blob_hash, blob.length)
         if response_key == RECEIVED_SD_BLOB:
             yield self.blob_storage.load_sd_blob(blob)
