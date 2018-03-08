@@ -117,7 +117,8 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
             total_blobs = len(blobs)
             self.enqueued_stream = True
             yield self.stream_client_factory
-            enqueue_stream(self.sd_hash_receiving_stream, total_blobs, self.blob_storage.db_dir, self.stream_client_factory)
+            enqueue_stream(self.sd_hash_receiving_stream, total_blobs, self.blob_storage.db_dir,
+                           self.stream_client_factory, redis_address=self.blob_storage._redis_address)
 
     def enqueue(self):
         d = defer.DeferredList(self.blob_finished_ds)

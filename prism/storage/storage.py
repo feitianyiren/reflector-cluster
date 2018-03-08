@@ -34,6 +34,7 @@ MAX_BLOBS_PER_HOST = conf['max blobs']
 
 REDIS_ADDRESS = conf['redis server']
 
+
 def get_redis_connection(address):
     if address == 'fake':
         # use fakeredis for testing only
@@ -41,6 +42,7 @@ def get_redis_connection(address):
         return fakeredis.FakeRedis()
     else:
         return Redis(address)
+
 
 class RedisHelper(object):
     def __init__(self, redis_address):
@@ -172,9 +174,11 @@ class RedisHelper(object):
         blobs = yield self.sinter(host, SD_BLOB_HASHES)
         defer.returnValue(len(blobs))
 
+
 class ClusterStorage(object):
     def __init__(self, path=None, redis_address=None):
-        self.db = RedisHelper(redis_address or conf['redis server'])
+        self._redis_address = redis_address or conf['redis server']
+        self.db = RedisHelper(self._redis_address)
         self.db_dir = path or os.path.expandvars(conf['blob directory'])
         if not os.path.isdir(self.db_dir):
             raise OSError("blob storage directory \"%s\" does not exist" % self.db_dir)
@@ -334,7 +338,6 @@ class ClusterStorage(object):
         # this will set host to empty
         yield self.db.set_blob(blob_hash, blob_length, timestamp)
         yield self.db.delete_blob_from_host(blob_hash, host)
-
 
     @defer.inlineCallbacks
     def completed(self, blob_hash, blob_length):
