@@ -9,7 +9,7 @@ from rq import Queue
 from redis.exceptions import ConnectionError
 from rq.timeouts import JobTimeoutException
 
-from twisted.internet import defer, task
+from twisted.internet import defer
 
 from prism.storage.storage import ClusterStorage, get_redis_connection
 from prism.config import get_settings
@@ -23,6 +23,7 @@ NUM_HOSTS = len(HOSTS) - 1
 TCP_CONNECT_TIMEOUT = 15
 
 log = logging.getLogger(__name__)
+
 
 def retry_redis(fn):
     def _wrapper(*a, **kw):
@@ -56,6 +57,7 @@ def next_host(redis_conn):
 def get_blob_path(blob_hash, blob_storage):
     return os.path.join(blob_storage.db_dir, blob_hash)
 
+
 @defer.inlineCallbacks
 def update_sent_blobs(blob_hashes_sent, host, blob_storage):
     for blob_hash in blob_hashes_sent:
@@ -65,6 +67,7 @@ def update_sent_blobs(blob_hashes_sent, host, blob_storage):
         if os.path.isfile(blob_path):
             log.debug('removing %s', blob_path)
             os.remove(blob_path)
+
 
 def connect_factory(host, port, factory, blob_storage, hash_to_process):
     from twisted.internet import reactor
@@ -105,11 +108,13 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         log.exception("Job (pid %s) encountered unexpected error")
         return sys.exit(1)
 
+
 def factory_setup_error(error):
     from twisted.internet import reactor
     log.error("Error when setting up factory:%s",error)
     reactor.fireSystemEvent("shutdown")
     return sys.exit(1)
+
 
 def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
     log.debug("process blob pid %s", os.getpid())
@@ -153,16 +158,16 @@ def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_in
 @retry_redis
 def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, redis_address=settings['redis server'],
                    host_infos=None):
-
     timeout = (num_blobs_in_stream+1)*30
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
     q.enqueue(process_stream, sd_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=timeout)
 
+
 @retry_redis
-def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'], 
+def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'],
                     host_infos=None):
 
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
-    q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_getter, timeout=60)
+    q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)

@@ -40,6 +40,7 @@ def enqueue_on_start():
         enqueue_stream(sd_hash, len(blobs), cluster_storage.db_dir, build_prism_stream_client_factory)
         log.info("enqueued stream {}".format(sd_hash))
 
+
 def main():
     # clear the failed task queue
     redis_connection = get_redis_connection(settings['redis server'])

@@ -1,16 +1,15 @@
 import logging
-import os
 from twisted.internet.protocol import ServerFactory, ClientFactory
 from twisted.internet import defer
 
 from prism.protocol.server import ReflectorServerProtocol
 from prism.protocol.client import BlobReflectorClient
 from prism.protocol.stream_client import StreamReflectorClient
-from prism.protocol.task import enqueue_blob, enqueue_stream
 from prism.config import get_settings
 
 log = logging.getLogger(__name__)
 settings = get_settings()
+
 
 class PrismServerFactory(ServerFactory):
     """
@@ -66,6 +65,7 @@ class PrismClientFactory(ClientFactory):
         self.p = p
         return p
 
+
 class PrismStreamClientFactory(ClientFactory):
     protocol = StreamReflectorClient
 
@@ -95,6 +95,7 @@ class PrismStreamClientFactory(ClientFactory):
 
 def build_prism_stream_server_factory(blob_storage):
     return PrismServerFactory(blob_storage)
+
 
 @defer.inlineCallbacks
 def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
@@ -141,6 +142,7 @@ def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
 
     defer.returnValue(PrismStreamClientFactory(blob_storage, sd_blob, blobs))
 
+
 @defer.inlineCallbacks
 def build_prism_blob_client_factory(blob_hash, blob_storage):
     """
@@ -162,5 +164,3 @@ def build_prism_blob_client_factory(blob_hash, blob_storage):
         raise Exception("cannot send unverified sd blob")
 
     defer.returnValue(PrismClientFactory(blob_storage, [blob_hash]))
-
-
