@@ -3,6 +3,7 @@ import yaml
 import logging
 from logging.handlers import RotatingFileHandler
 
+
 def init_log(verbose=True):
     log = logging.getLogger()
     if not len(log.handlers):

@@ -58,10 +58,11 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
 
     def connectionLost(self, reason):
         self.setTimeout(None)
-        log.info('Connection lost: %s', reason)
         if reason.check(error.ConnectionDone):
+            log.error('Connection done')
             self.factory.on_connection_lost_d.callback(None)
         else:
+            log.error('Connection lost: %s', reason)
             self.factory.on_connection_lost_d.errback(reason)
             raise reason
 

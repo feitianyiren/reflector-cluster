@@ -60,7 +60,7 @@ def get_blob_path(blob_hash, blob_storage):
 @defer.inlineCallbacks
 def update_sent_blobs(blob_hashes_sent, host, blob_storage):
     for blob_hash in blob_hashes_sent:
-        log.info("updating sent blob %s", blob_hash)
+        log.debug("updating sent blob %s", blob_hash)
         res = yield blob_storage.add_blob_to_host(blob_hash, host)
         blob_path = get_blob_path(blob_hash, blob_storage)
         if os.path.isfile(blob_path):
@@ -136,7 +136,7 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
 
 
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
-    log.info("processing stream pid %s", os.getpid())
+    log.info("processing %s pid %s", sd_hash, s.getpid())
     if host_infos is None:
         host, port, host_blob_count = next_host(get_redis_connection(redis_address))
     else:
