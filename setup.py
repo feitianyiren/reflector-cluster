@@ -8,9 +8,9 @@ requires = [
     'rq==0.8.0',
     'pyyaml==3.12',
     'psutil==5.2.2',
-    'lbryschema==0.0.15rc2',
-    'lbryum==3.2.0rc18',
-    'lbrynet==0.19.1rc4',
+    'lbryschema==0.0.15rc3',
+    'lbryum==3.2.0rc19',
+    'lbrynet==0.19.1rc5',
 ]
 console_scripts = [
     'prism-server = prism.server:main',
