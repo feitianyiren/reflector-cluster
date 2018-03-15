@@ -68,7 +68,7 @@ def update_sent_blobs(blob_hashes_sent, host, blob_storage):
             os.remove(blob_path)
 
 
-def connect_factory(host, port, factory, blob_storage, hash_to_process):
+def connect_stream_factory(host, port, factory, blob_storage, hash_to_process):
     from twisted.internet import reactor
     @defer.inlineCallbacks
     def on_finish(result):
@@ -108,6 +108,46 @@ def connect_factory(host, port, factory, blob_storage, hash_to_process):
         return sys.exit(1)
 
 
+def connect_blob_factory(host, port, factory, blob_storage, hashes_to_process):
+    from twisted.internet import reactor
+    @defer.inlineCallbacks
+    def on_finish(result):
+        log.info("Finished sending %i of %i blobs to %s", len(factory.p.blob_hashes_sent),
+                 len(hashes_to_process), host)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+    @defer.inlineCallbacks
+    def on_error(error):
+        log.error("Error when sending: %s. Hashes sent %s", error, factory.p.blob_hashes_sent)
+        yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
+        connection.disconnect()
+        reactor.fireSystemEvent("shutdown")
+
+    def on_connection_fail(result):
+        log.error("Failed to connect to %s:%s", host, port)
+        reactor.fireSystemEvent("shutdown")
+
+    def _error(failure):
+        log.error("Failed on_connection_lost_d callback: %s", failure)
+        reactor.fireSystemEvent("shutdown")
+
+    factory.on_connection_lost_d.addCallbacks(on_finish, on_error)
+    factory.on_connection_lost_d.addErrback(_error)
+
+    factory.on_connection_fail_d.addCallback(on_connection_fail)
+    try:
+        log.debug("Connecting factory to %s:%s", host, port)
+        connection = reactor.connectTCP(host, port, factory, timeout=TCP_CONNECT_TIMEOUT)
+    except JobTimeoutException:
+        log.error("Failed to forward blobs to %s", host)
+        return sys.exit(0)
+    except Exception as err:
+        log.exception("Job (pid %s) encountered unexpected error")
+        return sys.exit(1)
+
+
 def factory_setup_error(error):
     from twisted.internet import reactor
     log.error("Error when setting up factory:%s",error)
@@ -115,7 +155,7 @@ def factory_setup_error(error):
     return sys.exit(1)
 
 
-def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
+def process_blobs(blob_hashes, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
     log.debug("process blob pid %s", os.getpid())
     if host_infos is None:
         host, port, host_blob_count = next_host(get_redis_connection(redis_address))
@@ -128,9 +168,9 @@ def process_blob(blob_hash, db_dir, client_factory_class, redis_address, host_in
         d = setup_d()
     else:
         d = defer.succeed(True)
-    d.addCallback(lambda _: client_factory_class(blob_hash, blob_storage))
+    d.addCallback(lambda _: client_factory_class(blob_hashes, blob_storage))
     d.addErrback(factory_setup_error)
-    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, blob_hash))
+    d.addCallback(lambda factory: connect_blob_factory(host, port, factory, blob_storage, blob_hashes))
     reactor.run()
     return sys.exit(0)
 
@@ -149,7 +189,7 @@ def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_in
         d = defer.succeed(True)
     d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage, host))
     d.addErrback(factory_setup_error)
-    d.addCallback(lambda factory: connect_factory(host, port, factory, blob_storage, sd_hash))
+    d.addCallback(lambda factory: connect_stream_factory(host, port, factory, blob_storage, sd_hash))
     reactor.run()
     return sys.exit(0)
 
@@ -164,9 +204,9 @@ def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, r
 
 
 @retry_redis
-def enqueue_blob(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'],
+def enqueue_blobs(blob_hash, db_dir, client_factory_class, redis_address=settings['redis server'],
                     host_infos=None):
 
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
-    q.enqueue(process_blob, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)
+    q.enqueue(process_blobs, blob_hash, db_dir, client_factory_class, redis_address, host_infos, timeout=60)

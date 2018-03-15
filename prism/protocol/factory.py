@@ -144,23 +144,25 @@ def build_prism_stream_client_factory(sd_hash, blob_storage, host_to_send):
 
 
 @defer.inlineCallbacks
-def build_prism_blob_client_factory(blob_hash, blob_storage):
+def build_prism_blob_client_factory(blob_hashes, blob_storage):
     """
     Build a prism blob client factory
 
     blob_hash - blob_hash of stream to send
     blob_storage - blob storage class
     """
-    blob_exists = yield blob_storage.blob_exists(blob_hash)
-    if not blob_exists:
-        raise Exception("blob %s does not exist in cluster"%blob_hash)
 
-    blob_forwarded = yield blob_storage.blob_has_been_forwarded_to_host(blob_hash)
-    if blob_forwarded:
-        raise Exception("blob has been forwarded")
+    for blob_hash in blob_hashes:
+        blob_exists = yield blob_storage.blob_exists(blob_hash)
+        if not blob_exists:
+            raise Exception("blob %s does not exist in cluster" % blob_hash)
 
-    blob = yield blob_storage.get_blob(blob_hash)
-    if not blob.verified:
-        raise Exception("cannot send unverified sd blob")
+        blob_forwarded = yield blob_storage.blob_has_been_forwarded_to_host(blob_hash)
+        if blob_forwarded:
+            raise Exception("blob has been forwarded")
 
-    defer.returnValue(PrismClientFactory(blob_storage, [blob_hash]))
+        blob = yield blob_storage.get_blob(blob_hash)
+        if not blob.verified:
+            raise Exception("cannot send unverified sd blob")
+
+    defer.returnValue(PrismClientFactory(blob_storage, blob_hashes))
