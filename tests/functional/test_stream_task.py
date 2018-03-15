@@ -74,7 +74,7 @@ class TestTask(unittest.TestCase):
 
         # start client
         from twisted.internet import reactor
-        reactor.addSystemEventTrigger('before','shutdown', self._on_finish_stream)
+        reactor.addSystemEventTrigger('before', 'shutdown', self._on_finish_stream)
         try:
             process_stream(SD_BLOB_HASH, self.client_db_dir, client_factory_class, 'fake', host_infos=('localhost',5566,0),
                             setup_d = self._setup_client_blobs )
