@@ -1,12 +1,9 @@
-from twisted.internet import defer
-
-# defer.Deferred.debug = True
-import unittest
+from twisted.internet import defer, threads
+from twisted.trial import unittest
 import shutil
 import tempfile
 import os
 import multiprocessing
-import sys
 
 from lbrynet.blob.blob_file import BlobFile
 
@@ -16,13 +13,13 @@ from prism.storage.storage import ClusterStorage
 from prism.config import init_log
 from test_utils import setup_server, SD_BLOB_HASH, SD_BLOB_CONTENT, BLOB_HASH, BLOB_CONTENT
 
-sys.path.insert(0, os.path.dirname(__file__))
 init_log(verbose=True)
 
 
 class TestTask(unittest.TestCase):
 
     def setUp(self):
+        self._server_db_dir = tempfile.mkdtemp()
         self._setup_server([SD_BLOB_HASH, BLOB_HASH])
         self._setup_client()
 
@@ -32,7 +29,7 @@ class TestTask(unittest.TestCase):
         # this is where client will receive from server
         self.client_queue = multiprocessing.Queue()
         self.server_process = multiprocessing.Process(target=setup_server,
-            args=(self.server_queue, self.client_queue, blob_hashes_to_expect))
+            args=(self._server_db_dir, self.server_queue, self.client_queue, blob_hashes_to_expect))
         self.server_process.start()
 
     def _setup_client(self):
@@ -58,9 +55,11 @@ class TestTask(unittest.TestCase):
         blob_file = BlobFile(self.client_db_dir, BLOB_HASH, len(BLOB_CONTENT))
         out = yield self.client_storage.completed(BLOB_HASH, len(BLOB_CONTENT))
 
+    @defer.inlineCallbacks
     def tearDown(self):
-        shutil.rmtree(self.client_db_dir)
-        self.server_process.join()
+        yield threads.deferToThread(self.server_process.join)
+        yield threads.deferToThread(shutil.rmtree, self.client_db_dir)
+        yield threads.deferToThread(shutil.rmtree, self._server_db_dir)
 
     @defer.inlineCallbacks
     def _on_finish_stream(self):

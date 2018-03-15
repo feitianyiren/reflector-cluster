@@ -3,7 +3,7 @@ import os
 import sys
 
 from prism import config
-from prism.protocol.task import process_blob
+from prism.protocol.task import process_blobs
 
 from redis import Redis
 from rq import Queue
@@ -36,8 +36,7 @@ def main():
             f.write(blob_contents)
         blobs.append(blob_hash)
 
-    for blob_hash in blobs:
-        q.enqueue(process_blob, blob_hash, 1)
+    q.enqueue(process_blobs, blobs, 1)
 
 
 if __name__ == "__main__":
