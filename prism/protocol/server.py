@@ -9,12 +9,12 @@ from twisted.internet.error import ConnectionDone
 from twisted.protocols.policies import TimeoutMixin
 
 from lbrynet.core.utils import is_valid_blobhash
+from lbrynet.core.Error import DownloadCanceledError, InvalidBlobHashError
 
 from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
 from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
 from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
-from prism.error import DownloadCanceledError, InvalidBlobHashError, ReflectorRequestError
-from prism.error import ReflectorClientVersionError
+from prism.error import ReflectorRequestError, ReflectorClientVersionError
 from prism.protocol.task import enqueue_stream
 from prism.config import get_settings
 
@@ -83,7 +83,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
     def clean_up_failed_upload(self, err, blob):
         if err.check(ConnectionDone):
             return defer.succeed(None)
-        elif err.check(DownloadCanceledError):
+        elif err.check(DownloadCanceledError, defer.CancelledError):
             log.warning("Failed to receive %s", blob)
         else:
             log.exception(err)

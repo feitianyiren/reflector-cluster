@@ -11,7 +11,7 @@ from twisted.internet import defer, threads
 
 from prism.config import get_settings
 from prism.constants import BLOB_HASH_LENGTH
-from prism.error import InvalidBlobHashError
+from lbrynet.core.Error import InvalidBlobHashError, InvalidDataError
 
 log = logging.getLogger(__name__)
 
@@ -333,7 +333,7 @@ class ClusterStorage(object):
             raise Exception('blob not found')
 
         blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
-        if len(host) == 0:# blob is not on a host
+        if len(host) == 0:  # blob is not on a host
             raise Exception('blob must be on a host for delete_blob_from_host')
         # this will set host to empty
         yield self.db.set_blob(blob_hash, blob_length, timestamp)

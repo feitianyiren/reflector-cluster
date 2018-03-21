@@ -31,13 +31,5 @@ class InvalidBlobHashError(ReflectorBaseException):
     pass
 
 
-class DownloadCanceledError(ReflectorBaseException):
-    pass
-
-
-class InvalidDataError(ReflectorBaseException):
-    pass
-
-
 class AlreadyStarted(ReflectorBaseException):
     pass
