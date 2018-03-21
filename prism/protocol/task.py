@@ -207,4 +207,4 @@ def enqueue_stream(sd_hash, num_blobs_in_stream, db_dir, client_factory_class, r
 def enqueue_blobs(blob_hashes, db_dir, client_factory_class, redis_address=settings['redis server'], host_infos=None):
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
-    q.enqueue(process_blobs, blob_hashes, db_dir, client_factory_class, redis_address, host_infos, timeout=len(blob_hashes+1)*30)
+    q.enqueue(process_blobs, blob_hashes, db_dir, client_factory_class, redis_address, host_infos, timeout=(len(blob_hashes)+1)*30)
