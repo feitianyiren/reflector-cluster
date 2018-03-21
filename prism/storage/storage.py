@@ -315,8 +315,16 @@ class ClusterStorage(object):
             blob_length, timestamp, host = yield self.db.get_blob(blob_hash)
             if len(host) > 0: # blob is on a host
                 raise Exception("Cannot delete blob on a host, use delete_from_host")
-            blob = BlobFile(self.db_dir, blob_hash, blob_length)
-            yield blob.delete()
+            try:
+                blob = BlobFile(self.db_dir, blob_hash, blob_length)
+                yield blob.delete()
+            except InvalidDataError:
+                log.warning("blob is invalid: %s", blob_hash)
+                blob_path = os.path.join(self.db_dir, blob_hash)
+                if blob_path:
+                    yield threads.deferToThread(os.remove, blob_path)
+                else:
+                    log.warning("blob does not exist on disk")
             was_deleted = yield self.db.delete_blob(blob_hash)
             is_sd_blob = yield self.is_sd_blob(blob_hash)
             if is_sd_blob:
