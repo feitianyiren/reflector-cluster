@@ -27,12 +27,16 @@ SD_BLOB_HASHES = "sd_blob_hashes"
 # each sd_blob_hash is its own table, stores blobs is stream
 # each host is its own table, stores all blob hashes it has
 
+BANNED_PEERS = "banned_peers"
+# contains keys of addresses of peers who uploaded invalid blobs and values of the timestamp of the last bad upload
 
 # set of node addresses
 CLUSTER_NODE_ADDRESSES = conf['hosts']
 MAX_BLOBS_PER_HOST = conf['max blobs']
 
 REDIS_ADDRESS = conf['redis server']
+
+BAN_LENGTH = 300
 
 
 def get_redis_connection(address):
@@ -146,6 +150,22 @@ class RedisHelper(object):
             timestamp = 0
             host = ''
         defer.returnValue((length, timestamp, host))
+
+    @defer.inlineCallbacks
+    def ban_peer(self, address):
+        log.info("Ban %s", address)
+        yield self.hset(BANNED_PEERS, address, time.time())
+
+    @defer.inlineCallbacks
+    def peer_is_banned(self, address):
+        banned_timestamp = yield self.hget(BANNED_PEERS, address)
+        if banned_timestamp:
+            if time.time() - BAN_LENGTH > float(banned_timestamp):
+                log.debug("Unban %s", address)
+                yield self.hdel(BANNED_PEERS, address)
+            else:
+                defer.returnValue(True)
+        defer.returnValue(False)
 
     @defer.inlineCallbacks
     def delete_blob(self, blob_hash):
@@ -307,6 +327,12 @@ class ClusterStorage(object):
         out = yield self.db.is_sd_blob(blob_hash)
         defer.returnValue(out)
 
+    def ban_peer(self, address):
+        return self.db.ban_peer(address)
+
+    def peer_is_banned(self, address):
+        return self.db.peer_is_banned(address)
+
     @defer.inlineCallbacks
     def delete(self, blob_hash):
         log.info("Delete %s", blob_hash)
@@ -356,11 +382,48 @@ class ClusterStorage(object):
         defer.returnValue(was_set)
 
     @defer.inlineCallbacks
+    def get_forwarding_task(self, sd_hash):
+        destination = None
+        sd_blob_exists = yield self.blob_exists(sd_hash)
+        should_forward = False
+        if sd_blob_exists:
+            sd_length, sd_timestamp, sd_host = yield self.db.get_blob(sd_hash)
+            if sd_host:
+                destination = sd_host
+            send_sd = False if sd_host else True
+            blobs_to_send = []
+            data_blobs = yield self.get_blobs_for_stream(sd_hash)
+            for blob_hash in data_blobs:
+                blob_exists = yield self.blob_exists(blob_hash)
+                if blob_exists:
+                    length, timestamp, host = yield self.db.get_blob(blob_hash)
+                    if not host:
+                        if os.path.isfile(os.path.join(self.db_dir, blob_hash)) and \
+                                os.stat(os.path.join(self.db_dir, blob_hash)).st_size == length:
+                            blobs_to_send.append(blob_hash)
+                    elif destination and destination != host:
+                        log.error("host mismatch")
+                        # raise Exception("host mismatch")
+                    elif host and not destination:  # use the first host data has been sent to
+                        destination = host
+            if destination and destination not in conf['hosts']:
+                log.warning("Host has been disabled, cannot forward stream to it")
+            elif destination:
+                blobs_on_host = yield self.get_host_count(destination)
+                total_to_send = len(blobs_to_send)
+                if send_sd:
+                    total_to_send += 1
+                if blobs_on_host + total_to_send > conf['max blobs']:
+                    log.warning("Forwarding stream would exceed max blobs for host")
+                else:
+                    should_forward = True
+                    log.info("Should forward %i pending of %i total blobs", len(blobs_to_send), len(data_blobs))
+
+    @defer.inlineCallbacks
     def verify_stream_ready_to_forward(self, sd_hash):
         blob_exists = yield self.blob_exists(sd_hash)
         if not blob_exists:
             defer.returnValue(False)
-
         blob_forwarded = yield self.blob_has_been_forwarded_to_host(sd_hash)
         if blob_forwarded:
             defer.returnValue(False)
@@ -369,6 +432,12 @@ class ClusterStorage(object):
             defer.returnValue(False)
         blobs = yield self.get_blobs_for_stream(sd_hash)
         for b in blobs:
+            data_forwarded = yield self.blob_has_been_forwarded_to_host(b)
+            if data_forwarded:
+                log.warning("Data blobs are already forwarded for %s, stream needs to be repaired", sd_hash)
+                defer.returnValue(False)
+            if not os.path.isfile(os.path.join(self.db_dir, b)):
+                defer.returnValue(False)
             if not b.verified:
                 defer.returnValue(False)
         defer.returnValue(True)
@@ -377,5 +446,3 @@ class ClusterStorage(object):
     def get_host_count(self, host):
         count = yield self.db.get_host_count(host)
         defer.returnValue(count)
-
-

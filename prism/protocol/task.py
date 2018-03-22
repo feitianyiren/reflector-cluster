@@ -72,7 +72,7 @@ def connect_stream_factory(host, port, factory, blob_storage, hash_to_process):
     from twisted.internet import reactor
     @defer.inlineCallbacks
     def on_finish(result):
-        log.info("Finished sending %s to %s", hash_to_process, host)
+        log.info("Finished sending %s and %i data blobs to %s", hash_to_process, len(factory.p.blob_hashes_sent), host)
         yield update_sent_blobs(factory.p.blob_hashes_sent, host, blob_storage)
         connection.disconnect()
         reactor.fireSystemEvent("shutdown")

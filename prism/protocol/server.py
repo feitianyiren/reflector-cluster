@@ -9,12 +9,12 @@ from twisted.internet.error import ConnectionDone
 from twisted.protocols.policies import TimeoutMixin
 
 from lbrynet.core.utils import is_valid_blobhash
-from lbrynet.core.Error import DownloadCanceledError, InvalidBlobHashError
+from lbrynet.core.Error import DownloadCanceledError, InvalidBlobHashError, InvalidDataError
 
 from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
 from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
 from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
-from prism.error import ReflectorRequestError, ReflectorClientVersionError
+from prism.error import ReflectorRequestError, ReflectorClientVersionError, SentInvalidBlob
 from prism.protocol.task import enqueue_stream
 from prism.config import get_settings
 
@@ -64,10 +64,18 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
     def connectionLost(self, reason=None):
         log.debug("Connection lost to %s: %s", self.peer.host, reason)
         if not reason or reason.check(error.ConnectionDone):
-            self.setTimeout(None)
-            self.enqueue()
+            if self.sd_hash_receiving_stream:
+                d = self.blob_storage.get_forwarding_task(self.sd_hash_receiving_stream)
+            else:
+                d = defer.succeed(None)
+            if self.blob_finished_ds:
+                self.setTimeout(None)
+                d.addCallback(lambda _: self.enqueue())
+            return d
+        elif reason.check(error.ConnectionLost):
+            log.warning("Connection lost to %s", self.peer.host)
         else:
-            log.warning("connection lost: %s", reason)
+            log.error("Connection lost: %s", reason)
 
     def handle_error(self, err):
         log.error(err.getTraceback())
@@ -80,14 +88,19 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
     # Incoming blob file stuff #
     ############################
 
-    def clean_up_failed_upload(self, err, blob):
+    @defer.inlineCallbacks
+    def clean_up_failed_upload(self, err, blob):  # returns bool to indicate if the connection should be dropped
         if err.check(ConnectionDone):
-            return defer.succeed(None)
+            defer.returnValue(False)
+        elif err.check(InvalidDataError):
+            log.warning("Invalid blob (%s) received from %s", blob.blob_hash, self.peer.host)
+            yield self.blob_storage.ban_peer(self.peer.host)
         elif err.check(DownloadCanceledError, defer.CancelledError):
-            log.warning("Failed to receive %s", blob)
+            log.warning("Failed to receive %s from %s", blob.blob_hash, self.peer.host)
         else:
             log.exception(err)
-        return self.blob_storage.delete(blob.blob_hash)
+        yield self.blob_storage.delete(blob.blob_hash)
+        defer.returnValue(True)
 
     @defer.inlineCallbacks
     def _on_completed_blob(self, blob, response_key):
@@ -113,11 +126,10 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
             raise Exception("no sd_hash to enqueue")
         ready = yield self.blob_storage.verify_stream_ready_to_forward(self.sd_hash_receiving_stream)
         if ready and not self.enqueued_stream:
-            log.info("enqueuing stream %s", self.sd_hash_receiving_stream)
             blobs = yield self.blob_storage.get_blobs_for_stream(self.sd_hash_receiving_stream)
             total_blobs = len(blobs)
             self.enqueued_stream = True
-            yield self.stream_client_factory
+            log.info("enqueuing stream %s and %i data blobs", self.sd_hash_receiving_stream, total_blobs)
             enqueue_stream(self.sd_hash_receiving_stream, total_blobs, self.blob_storage.db_dir,
                            self.stream_client_factory, redis_address=self.blob_storage._redis_address)
 
@@ -128,12 +140,16 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         # for the blob may not fire
         d.addTimeout(60, reactor)
         d.addCallback(self._enqueue)
+        return d
 
     @defer.inlineCallbacks
     def _on_failed_blob(self, err, response_key):
-        yield self.clean_up_failed_upload(err, self.incoming_blob)
+        should_disconnect = yield self.clean_up_failed_upload(err, self.incoming_blob)
         self.close_blob()
         yield self.send_response({response_key: False})
+        if should_disconnect:
+            log.debug("Drop connection to %s", self.peer.host)
+            self.transport.loseConnection()
 
     def handle_incoming_blob(self, response_key):
         """
@@ -144,7 +160,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         """
         blob = self.incoming_blob
 
-        self.blob_writer, self.blob_finished_d  = blob.open_for_writing(self.peer)
+        self.blob_writer, self.blob_finished_d = blob.open_for_writing(self.peer)
         self.blob_finished_ds.append(self.blob_finished_d)
         self.blob_finished_d.addCallback(self._on_completed_blob, response_key)
         self.blob_finished_d.addErrback(self._on_failed_blob, response_key)
@@ -162,6 +178,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
     def dataReceived(self, data):
         self.setTimeout(self.PROTOCOL_TIMEOUT)
         if self.receiving_blob:
+            log.debug("Write %i bytes to blob", len(data))
             self.blob_writer.write(data)
         else:
             log.debug('Not yet recieving blob, data needs further processing')
@@ -223,6 +240,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
             return self.handle_blob_request(request_dict)
         raise ReflectorRequestError("Invalid request")
 
+    @defer.inlineCallbacks
     def handle_handshake(self, request_dict):
         """
         Upon connecting, the client sends a version handshake:
@@ -236,6 +254,12 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         }
         """
 
+        is_banned = yield self.blob_storage.peer_is_banned(self.peer.host)
+        if is_banned:
+            log.debug("Dropping connection to banned peer: %s", self.peer.host)
+            self.transport.loseConnection()
+            defer.returnValue(None)
+
         if VERSION not in request_dict:
             raise ReflectorRequestError("Client should send version")
 
@@ -245,7 +269,7 @@ class ReflectorServerProtocol(Protocol, TimeoutMixin):
         self.peer_version = int(request_dict[VERSION])
         log.debug('Handling handshake for client version %i', self.peer_version)
         self.received_handshake = True
-        return self.send_handshake_response()
+        yield self.send_handshake_response()
 
     def send_handshake_response(self):
         d = defer.succeed({VERSION: self.peer_version})

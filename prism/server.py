@@ -29,7 +29,9 @@ class PrismServer(service.Service):
         self._port = reactor.listenTCP(self.port_num, factory, 50, LISTEN_ON)
 
     def stopService(self):
+        log.info("Stopping prism server (pid %i)", os.getpid())
         return self._port.stopListening()
+
 
 @defer.inlineCallbacks
 def enqueue_on_start():
