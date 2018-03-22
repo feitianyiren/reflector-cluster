@@ -10,7 +10,7 @@ requires = [
     'psutil==5.2.2',
     'lbryschema==0.0.15rc3',
     'lbryum==3.2.0rc20',
-    'lbrynet==0.19.1rc6',
+    'lbrynet==0.19.2rc1',
 ]
 console_scripts = [
     'prism-server = prism.server:main',
