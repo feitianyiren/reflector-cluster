@@ -14,7 +14,7 @@ from lbrynet.core.Error import DownloadCanceledError, InvalidBlobHashError, Inva
 from prism.constants import BLOB_HASH, RECEIVED_BLOB, RECEIVED_SD_BLOB, SEND_BLOB, SEND_SD_BLOB
 from prism.constants import BLOB_SIZE, MAXIMUM_QUERY_SIZE, SD_BLOB_HASH, SD_BLOB_SIZE, VERSION
 from prism.constants import NEEDED_BLOBS, REFLECTOR_V1, REFLECTOR_V2
-from prism.error import ReflectorRequestError, ReflectorClientVersionError, SentInvalidBlob
+from prism.error import ReflectorRequestError, ReflectorClientVersionError
 from prism.protocol.task import enqueue_stream
 from prism.config import get_settings
 
