@@ -393,14 +393,14 @@ class ClusterStorage(object):
             send_sd = False if sd_host else True
             blobs_to_send = []
             data_blobs = yield self.get_blobs_for_stream(sd_hash)
-            for blob_hash in data_blobs:
-                blob_exists = yield self.blob_exists(blob_hash)
+            for blob in data_blobs:
+                blob_exists = yield self.blob_exists(blob.blob_hash)
                 if blob_exists:
-                    length, timestamp, host = yield self.db.get_blob(blob_hash)
+                    length, timestamp, host = yield self.db.get_blob(blob.blob_hash)
                     if not host:
-                        if os.path.isfile(os.path.join(self.db_dir, blob_hash)) and \
-                                os.stat(os.path.join(self.db_dir, blob_hash)).st_size == length:
-                            blobs_to_send.append(blob_hash)
+                        if os.path.isfile(os.path.join(self.db_dir, blob.blob_hash)) and \
+                                os.stat(os.path.join(self.db_dir, blob.blob_hash)).st_size == length:
+                            blobs_to_send.append(blob.blob_hash)
                     elif destination and destination != host:
                         log.error("host mismatch")
                         # raise Exception("host mismatch")
@@ -432,11 +432,11 @@ class ClusterStorage(object):
             defer.returnValue(False)
         blobs = yield self.get_blobs_for_stream(sd_hash)
         for b in blobs:
-            data_forwarded = yield self.blob_has_been_forwarded_to_host(b)
+            data_forwarded = yield self.blob_has_been_forwarded_to_host(b.blob_hash)
             if data_forwarded:
                 log.warning("Data blobs are already forwarded for %s, stream needs to be repaired", sd_hash)
                 defer.returnValue(False)
-            if not os.path.isfile(os.path.join(self.db_dir, b)):
+            if not os.path.isfile(os.path.join(self.db_dir, b.blob_hash)):
                 defer.returnValue(False)
             if not b.verified:
                 defer.returnValue(False)
