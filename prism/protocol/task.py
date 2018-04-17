@@ -148,6 +148,18 @@ def connect_blob_factory(host, port, factory, blob_storage, hashes_to_process):
         return sys.exit(1)
 
 
+def connect_ping_factory(host, port, factory):
+    from twisted.internet import reactor
+
+    def on_finish(result):
+        reactor.fireSystemEvent("shutdown")
+
+    reactor.connectTCP(host, port, factory, timeout=TCP_CONNECT_TIMEOUT)
+    factory.finished_d.addBoth(on_finish)
+
+    return sys.exit(1)
+
+
 def factory_setup_error(error):
     from twisted.internet import reactor
     log.error("Error when setting up factory:%s",error)
@@ -208,3 +220,22 @@ def enqueue_blobs(blob_hashes, db_dir, client_factory_class, redis_address=setti
     redis_connection = get_redis_connection(redis_address)
     q = Queue(connection=redis_connection)
     q.enqueue(process_blobs, blob_hashes, db_dir, client_factory_class, redis_address, host_infos, timeout=(len(blob_hashes)+1)*30)
+
+
+def ping_stream(sd_hash, db_dir, client_factory_class, redis_address, host, port=5566):
+    log.info("ping stream %s pid %s", sd_hash, os.getpid())
+    blob_storage = ClusterStorage(db_dir, redis_address)
+    from twisted.internet import reactor
+    d = defer.succeed(True)
+    d.addCallback(lambda _: client_factory_class(sd_hash, blob_storage))
+    d.addErrback(factory_setup_error)
+    d.addCallback(lambda factory: connect_ping_factory(host, port, factory))
+    reactor.run()
+    return sys.exit(0)
+
+
+@retry_redis
+def enqueue_ping(sd_hash, db_dir, ping_factory_class, redis_address, host, port):
+    redis_connection = get_redis_connection(redis_address)
+    q = Queue(connection=redis_connection)
+    q.enqueue(ping_stream, sd_hash, db_dir, ping_factory_class, redis_address, host, port)

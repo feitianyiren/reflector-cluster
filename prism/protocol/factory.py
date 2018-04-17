@@ -4,7 +4,7 @@ from twisted.internet import defer
 
 from prism.protocol.server import ReflectorServerProtocol
 from prism.protocol.client import BlobReflectorClient
-from prism.protocol.stream_client import StreamReflectorClient
+from prism.protocol.stream_client import StreamReflectorClient, StreamPingClient
 from prism.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -93,8 +93,46 @@ class PrismStreamClientFactory(ClientFactory):
         return p
 
 
+class PrismStreamPingFactory(PrismStreamClientFactory):
+    protocol = StreamPingClient
+    finished_d = defer.Deferred()
+
+    def buildProtocol(self, addr):
+        p = self.protocol(self.sd_blob, self.blobs)
+        p.factory = self
+        p.addr = addr
+        p.blobs_to_send = []
+        p.protocol_version = self.protocol_version
+        p.finished_d = self.finished_d
+        self.p = p
+        return p
+
+
 def build_prism_stream_server_factory(blob_storage):
     return PrismServerFactory(blob_storage)
+
+
+@defer.inlineCallbacks
+def build_prism_stream_ping_factory(sd_hash, blob_storage):
+    sd_blob = yield blob_storage.get_blob(sd_hash)
+    factory = PrismStreamPingFactory(blob_storage, sd_blob, [])
+
+    @defer.inlineCallbacks
+    def _handle_result(result):
+        if not result['needed_blobs'] and not result['send_sd_blob']:
+            log.info("Whole stream %s is on %s", sd_hash, factory.p.addr.host)
+            yield factory.storage.add_blob_to_host(sd_hash, factory.p.addr.host)
+            blobs = yield factory.storage.get_blobs_for_stream(sd_hash)
+            for blob in blobs:
+                yield factory.storage.add_blob_to_host(blob.blob_hash, factory.p.addr.host)
+                # blob_path = os.path.join(factory.storage.db_dir, blob.blob_hash)
+                # if os.path.isfile(blob_path):
+                #     log.debug('removing %s', blob_path)
+                #     os.remove(blob_path)
+
+    factory.finished_d.addCallback(_handle_result)
+    factory.finished_d.addErrback(log.exception)
+    defer.returnValue(factory)
 
 
 @defer.inlineCallbacks

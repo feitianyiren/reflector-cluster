@@ -27,9 +27,5 @@ class IncompleteResponse(ReflectorBaseException):
     """
 
 
-class InvalidBlobHashError(ReflectorBaseException):
-    pass
-
-
 class AlreadyStarted(ReflectorBaseException):
     pass

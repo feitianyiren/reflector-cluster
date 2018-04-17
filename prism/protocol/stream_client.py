@@ -229,3 +229,24 @@ class StreamReflectorClient(Protocol, TimeoutMixin):
             # close connection
             log.debug('No more blob hashes, closing connection')
             self.transport.loseConnection()
+
+
+class StreamPingClient(StreamReflectorClient):
+    def handle_descriptor_response(self, response_dict):
+        self.disconnect(error.ConnectionDone)
+        self.finished_d.callback(response_dict)
+        return defer.succeed(None)
+
+    def response_failure_handler(self, err):
+        if not err.check(error.ConnectionLost):
+            log.warning("An error occurred handling the response: %s", err.getTraceback())
+
+    def connectionLost(self, reason):
+        self.setTimeout(None)
+        if reason.check(error.ConnectionDone, error.ConnectionLost):
+            log.debug('Connection done')
+            self.factory.on_connection_lost_d.callback(None)
+        else:
+            log.error('Connection lost: %s', reason)
+            self.factory.on_connection_lost_d.errback(reason)
+            raise reason
