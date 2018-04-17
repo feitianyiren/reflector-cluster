@@ -385,39 +385,45 @@ class ClusterStorage(object):
     def get_forwarding_task(self, sd_hash):
         destination = None
         sd_blob_exists = yield self.blob_exists(sd_hash)
-        should_forward = False
         if sd_blob_exists:
             sd_length, sd_timestamp, sd_host = yield self.db.get_blob(sd_hash)
             if sd_host:
                 destination = sd_host
             send_sd = False if sd_host else True
-            blobs_to_send = []
+            blobs_to_send = [] if not send_sd else [sd_hash]
             data_blobs = yield self.get_blobs_for_stream(sd_hash)
             for blob in data_blobs:
                 blob_exists = yield self.blob_exists(blob.blob_hash)
                 if blob_exists:
                     length, timestamp, host = yield self.db.get_blob(blob.blob_hash)
                     if not host:
-                        if os.path.isfile(os.path.join(self.db_dir, blob.blob_hash)) and \
-                                os.stat(os.path.join(self.db_dir, blob.blob_hash)).st_size == length:
+                        file_stat = os.stat(os.path.join(self.db_dir, blob.blob_hash))
+                        if os.path.isfile(os.path.join(self.db_dir, blob.blob_hash)) and file_stat.st_size == length:
                             blobs_to_send.append(blob.blob_hash)
                     elif destination and destination != host:
-                        log.error("host mismatch")
-                        # raise Exception("host mismatch")
+                        log.warning("host mismatch for stream %s: %s vs %s", sd_hash, destination, host)
+                        defer.returnValue(False)
                     elif host and not destination:  # use the first host data has been sent to
                         destination = host
             if destination and destination not in conf['hosts']:
                 log.warning("Host has been disabled, cannot forward stream to it")
+                defer.returnValue(False)
             elif destination:
                 blobs_on_host = yield self.get_host_count(destination)
-                total_to_send = len(blobs_to_send)
-                if send_sd:
-                    total_to_send += 1
-                if blobs_on_host + total_to_send > conf['max blobs']:
+                if blobs_on_host + len(blobs_to_send) > conf['max blobs']:
                     log.warning("Forwarding stream would exceed max blobs for host")
+                    defer.returnValue(False)
                 else:
-                    should_forward = True
-                    log.info("Should forward %i pending of %i total blobs", len(blobs_to_send), len(data_blobs))
+                    log.debug("Should forward %i pending of %i total blobs", len(blobs_to_send), len(data_blobs) + 1)
+                    defer.returnValue(True)
+            elif len(blobs_to_send) == len(data_blobs) + 1:  # all blobs are pending, there is no partial upload
+                defer.returnValue(True)
+            else:
+                log.exception("this shouldn't happen")
+                defer.returnValue(False)
+        else:
+            log.warning("sd blob (%s) does not exist", sd_hash)
+            defer.returnValue(False)
 
     @defer.inlineCallbacks
     def verify_stream_ready_to_forward(self, sd_hash):
