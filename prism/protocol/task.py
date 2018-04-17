@@ -35,7 +35,10 @@ def retry_redis(fn):
     return _wrapper
 
 
-def next_host(redis_conn):
+def next_host(redis_conn, size=0, sd_hash=None):
+    if sd_hash:
+        size = len(redis_conn.smembers(sd_hash))
+        log.debug("stream has %i blobs", size)
     host_info = {}
     for host in HOSTS:
         if ":" in host:
@@ -43,7 +46,7 @@ def next_host(redis_conn):
             port = int(port)
         else:
             address, port = host, 5566
-        count = redis_conn.scard(address)
+        count = redis_conn.scard(address) + size
         if count < settings['max blobs']:
             host_info["%s:%i" % (address, port)] = count
 
@@ -170,7 +173,7 @@ def factory_setup_error(error):
 def process_blobs(blob_hashes, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
     log.debug("process blob pid %s", os.getpid())
     if host_infos is None:
-        host, port, host_blob_count = next_host(get_redis_connection(redis_address))
+        host, port, host_blob_count = next_host(get_redis_connection(redis_address), size=len(blob_hashes))
     else:
         host, port, host_blob_count = host_infos
     blob_storage = ClusterStorage(db_dir, redis_address)
@@ -190,7 +193,7 @@ def process_blobs(blob_hashes, db_dir, client_factory_class, redis_address, host
 def process_stream(sd_hash, db_dir, client_factory_class, redis_address, host_infos=None, setup_d=None):
     log.info("processing %s pid %s", sd_hash, os.getpid())
     if host_infos is None:
-        host, port, host_blob_count = next_host(get_redis_connection(redis_address))
+        host, port, host_blob_count = next_host(get_redis_connection(redis_address), sd_hash=sd_hash)
     else:
         host, port, host_blob_count = host_infos
     blob_storage = ClusterStorage(db_dir, redis_address)
