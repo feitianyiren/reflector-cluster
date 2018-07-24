@@ -4,7 +4,7 @@ from prism import __version__
 
 requires = [
     'twisted==16.6.0',
-    'pycrypto==2.6.1',
+    'pycryptodome==3.6.4',
     'rq==0.8.0',
     'pyyaml==3.12',
     'psutil==5.2.2',
