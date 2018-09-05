@@ -1,3 +1,5 @@
+# THIS REPO IS RETIRED. NEW REFLECTOR IS AT https://github.com/lbryio/reflector.go
+
 ## Requirements
 
 Prism server needs access to a redis instance.
